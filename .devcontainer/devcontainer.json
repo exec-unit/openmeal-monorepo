@@ -1,0 +1,108 @@
+{
+  "name": "OpenMeal Dev Environment",
+  // Pinned Debian bookworm base image
+  "image": "mcr.microsoft.com/devcontainers/base@sha256:23fa69fed758b7927c60061317d73baf7d66b9fca5c344e80bce3a940b229af0",
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2.5.4": {
+      "installZsh": false,
+      "username": "devuser",
+      "userUid": 1001,
+      "userGid": 1001,
+      "upgradePackages": false,
+      "configureSudo": true
+    },
+    "ghcr.io/devcontainers/features/docker-in-docker:2.12.4": {
+      "enableNonRootDocker": "true"
+    },
+    "ghcr.io/devcontainers/features/java:1.6.3": {
+      "version": "21",
+      "jdkDistro": "tem",
+      "installMaven": "true",
+      "installGradle": "true"
+    },
+    "ghcr.io/devcontainers/features/python:1.6.3": {
+      "version": "3.12",
+      "installTools": true
+    }
+  },
+  "remoteUser": "devuser",
+  // Persistent volumes for build artifacts and dependencies
+  "mounts": [
+    "source=openmeal-maven-cache,target=/home/devuser/.m2,type=volume",
+    "source=openmeal-bash-history,target=/home/devuser/.bash_history_mount,type=volume"
+  ],
+  // Environment variables for JVM and build tools
+  "containerEnv": {
+    "MAVEN_OPTS": "-Dmaven.repo.local=/home/devuser/.m2/repository -Xmx2048m -XX:+UseParallelGC",
+    "DOCKER_BUILDKIT": "1",
+    "COMPOSE_DOCKER_CLI_BUILD": "1"
+  },
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "java.configuration.updateBuildConfiguration": "automatic",
+        "java.jdt.ls.vmargs": "-XX:+UseParallelGC -XX:GCTimeRatio=4 -XX:AdaptiveSizePolicyWeight=90 -Xmx2G -Xms100m",
+        "files.watcherExclude": {
+          "**/target/**": true,
+          "**/.m2/**": true,
+          "**/node_modules/**": true
+        }
+      },
+      "extensions": [
+        "vscjava.vscode-java-pack",
+        "vmware.vscode-spring-boot",
+        "redhat.java",
+        "ms-azuretools.vscode-docker",
+        "redhat.ansible",
+        "ms-vscode.makefile-tools"
+      ]
+    },
+    "jetbrains": {
+      "backend": "IntelliJ"
+    }
+  },
+  // One-time setup commands executed after container creation
+  "postCreateCommand": "WORKSPACE_FOLDER=${containerWorkspaceFolder} bash ${containerWorkspaceFolder}/.devcontainer/post-create.sh",
+  "postStartCommand": {
+    "welcome-message": "echo '✓ OpenMeal Dev Environment Ready | Commands: make up, make down, make restart'"
+  },
+  // Port forwarding for microservices architecture
+  // 8080-8089: Service ports | 5005: Java debug | 9092: Kafka | 5432: PostgreSQL
+  "forwardPorts": [
+    8080,
+    5005,
+    8081,
+    8082,
+    8083,
+    8084,
+    8085,
+    8086,
+    8087,
+    8088,
+    8089,
+    9001,
+    9092,
+    5432
+  ],
+  // Port attributes for better development experience
+  "portsAttributes": {
+    "8080": {
+      "label": "Main API",
+      "onAutoForward": "notify"
+    },
+    "5005": {
+      "label": "Java Debug Port",
+      "onAutoForward": "silent"
+    },
+    "9092": {
+      "label": "Kafka",
+      "onAutoForward": "silent"
+    },
+    "5432": {
+      "label": "PostgreSQL",
+      "onAutoForward": "silent"
+    }
+  },
+  "workspaceFolder": "/workspace",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind"
+}
