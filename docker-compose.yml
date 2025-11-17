@@ -1,0 +1,145 @@
+# ============================================================================
+# OpenMeal Backend - Core Application Microservices
+# ============================================================================
+# This file contains definitions for all custom microservices.
+# Infrastructure services (postgres, redis, nginx, etc.) are located in:
+#   - compose/infra.yml (core infrastructure)
+#   - compose/monitoring.yml (monitoring stack)
+#
+# Usage:
+#   Set ENVIRONMENT in .env, then:
+#   make up      - start services
+#   make down    - stop services
+#   make restart - restart services
+# ============================================================================
+
+# Shared network for all services
+networks:
+  default:
+    name: ${DOCKER_NETWORK_NAME:-openmeal_net}
+    external: ${DOCKER_NETWORK_EXTERNAL:-false}
+
+# Volumes for microservices will be added as services are developed
+# volumes:
+#   service_data:
+
+services:
+  # Temporary placeholder to maintain valid compose structure
+  # Remove when adding actual microservices
+  placeholder:
+    image: alpine:latest
+    container_name: ${CONTAINER_PREFIX:-openmeal}-placeholder
+    command: [ "sh", "-c", "echo 'OpenMeal infrastructure ready. Add your microservices here.' && sleep 30" ]
+    restart: "no"
+    profiles: [ "placeholder" ]
+  # ============================================================================
+  # Example: API Gateway
+  # ============================================================================
+  # api-gateway:
+  #   build:
+  #     context: ./services/api-gateway
+  #     dockerfile: Dockerfile
+  #   image: openmeal/api-gateway:${VERSION:-latest}
+  #   container_name: openmeal-api-gateway
+  #   restart: unless-stopped
+  #   networks:
+  #     - default
+  #   ports:
+  #     - "${API_GATEWAY_PORT:-8080}:8080"
+  #   environment:
+  #     - SPRING_PROFILES_ACTIVE=${SPRING_PROFILE:-dev}
+  #     - SERVER_PORT=8080
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #     start_period: 40s
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+
+  # ============================================================================
+  # Example: User Service
+  # ============================================================================
+  # user-service:
+  #   build:
+  #     context: ./services/user-service
+  #     dockerfile: Dockerfile
+  #   image: openmeal/user-service:${VERSION:-latest}
+  #   container_name: openmeal-user-service
+  #   restart: unless-stopped
+  #   networks:
+  #     - default
+  #   ports:
+  #     - "${USER_SERVICE_PORT:-8081}:8080"
+  #   environment:
+  #     - SPRING_PROFILES_ACTIVE=${SPRING_PROFILE:-dev}
+  #     - SERVER_PORT=8080
+  #     - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+  #     - SPRING_DATASOURCE_USERNAME=${POSTGRES_USER}
+  #     - SPRING_DATASOURCE_PASSWORD=${POSTGRES_PASSWORD}
+  #     - SPRING_REDIS_HOST=redis
+  #     - SPRING_REDIS_PORT=6379
+  #     - SPRING_KAFKA_BOOTSTRAP_SERVERS=redpanda:9092
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #     start_period: 40s
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+  #     redpanda:
+  #       condition: service_healthy
+
+  # ============================================================================
+  # Add your microservices here following the pattern below
+  # ============================================================================
+  #
+  # Standard Spring Boot microservice structure:
+  #
+  # service-name:
+  #   build:
+  #     context: ./services/service-name
+  #     dockerfile: Dockerfile
+  #   image: openmeal/service-name:${VERSION:-latest}
+  #   container_name: openmeal-service-name
+  #   restart: unless-stopped
+  #   networks:
+  #     - default
+  #   ports:
+  #     - "${SERVICE_PORT}:8080"
+  #   environment:
+  #     - SPRING_PROFILES_ACTIVE=${SPRING_PROFILE:-dev}
+  #     - SERVER_PORT=8080
+  #     # Infrastructure service connections
+  #     - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+  #     - SPRING_DATASOURCE_USERNAME=${POSTGRES_USER}
+  #     - SPRING_DATASOURCE_PASSWORD=${POSTGRES_PASSWORD}
+  #     - SPRING_DATA_MONGODB_URI=mongodb://${MONGO_ROOT_USERNAME}:${MONGO_ROOT_PASSWORD}@mongodb:27017/your_db?authSource=admin
+  #     - SPRING_REDIS_HOST=redis
+  #     - SPRING_REDIS_PORT=6379
+  #     - SPRING_KAFKA_BOOTSTRAP_SERVERS=redpanda:9092
+  #     - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://keycloak:8080/realms/openmeal
+  #     - MINIO_URL=http://minio:9000
+  #     - MINIO_ACCESS_KEY=${MINIO_ROOT_USER}
+  #     - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD}
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #     start_period: 40s
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+
+  # ============================================================================
+  # IMPORTANT: Uncomment and configure services as you develop them!
+  # ============================================================================

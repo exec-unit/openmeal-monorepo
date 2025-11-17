@@ -1,0 +1,25 @@
+# ============================================================================
+# OpenMeal Local Microservice Activation
+# ============================================================================
+# Uncomment the services you want to run locally.
+# This file is ONLY used by 'make dev'.
+# Other environments (stage, prod) are configured declaratively via profiles.
+# ============================================================================
+
+# --- Core Services ---
+# auth-service
+# user-service
+# restaurant-service
+
+# --- Order & Payment Flow ---
+# order-service
+# payment-service
+
+# --- Logistics ---
+# dispatch-service
+# tracking-service
+
+# --- Support & Admin ---
+# support-service
+# admin-service
+# report-service
