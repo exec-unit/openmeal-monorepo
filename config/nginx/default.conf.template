@@ -1,0 +1,106 @@
+# ============================================================================
+# OpenMeal Nginx - Full HTTPS Configuration
+# ============================================================================
+# This template is used after SSL certificates are obtained.
+# For initial certificate acquisition, use default-http-only.conf.template
+# ============================================================================
+
+# DNS resolver for dynamic upstream resolution (Docker embedded DNS)
+resolver 127.0.0.11 valid=10s ipv6=off;
+
+upstream api_gateway {
+    server ${API_GATEWAY_HOST}:${API_GATEWAY_PORT};
+}
+
+upstream keycloak_server {
+    server keycloak:8080;
+}
+
+# SSL configuration (Mozilla Intermediate profile)
+ssl_protocols TLSv1.2 TLSv1.3;
+ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384;
+ssl_prefer_server_ciphers on;
+ssl_session_cache shared:MozSSL:10m;
+ssl_session_timeout 20m;
+ssl_session_tickets off;
+
+# HSTS (HTTP Strict Transport Security)
+add_header Strict-Transport-Security "max-age=15768000; includeSubDomains" always;
+
+# HTTP server - ACME challenges and HTTPS redirects
+server {
+    listen 80;
+    server_name ${API_DOMAIN_NAME} ${KEYCLOAK_DOMAIN_NAME} ${GRAFANA_DOMAIN_NAME};
+
+    # Let's Encrypt domain validation endpoint
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    # Force HTTPS for all other requests
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+# HTTPS server for API Gateway
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name ${API_DOMAIN_NAME};
+
+    # SSL certificate configuration
+    ssl_certificate /etc/letsencrypt/live/${API_DOMAIN_NAME}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${API_DOMAIN_NAME}/privkey.pem;
+
+    location / {
+        proxy_pass http://api_gateway;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+
+# HTTPS server for Keycloak authentication
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name ${KEYCLOAK_DOMAIN_NAME};
+
+    # SSL certificate configuration
+    ssl_certificate /etc/letsencrypt/live/${KEYCLOAK_DOMAIN_NAME}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${KEYCLOAK_DOMAIN_NAME}/privkey.pem;
+
+    location / {
+        proxy_pass http://keycloak_server;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+
+# BEGIN ANSIBLE MANAGED GRAFANA BLOCK
+# HTTPS server for Grafana monitoring (production only)
+# Uses dynamic resolution to avoid startup failure when Grafana is not running
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name ${GRAFANA_DOMAIN_NAME};
+
+    # SSL certificate configuration
+    ssl_certificate /etc/letsencrypt/live/${GRAFANA_DOMAIN_NAME}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${GRAFANA_DOMAIN_NAME}/privkey.pem;
+
+    location / {
+        # Dynamic upstream resolution - won't fail if grafana is not running
+        set $grafana_backend grafana:3000;
+        proxy_pass http://$grafana_backend;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+# END ANSIBLE MANAGED GRAFANA BLOCK

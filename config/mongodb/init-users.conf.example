@@ -1,0 +1,18 @@
+# ============================================================================
+# MongoDB Users and Databases Configuration
+# ============================================================================
+# Format: username:password_env_var:database:roles
+# Roles: readWrite, dbAdmin, userAdmin (comma-separated)
+#
+# Lines starting with # are comments and will be ignored
+#
+# Environment-based activation:
+#   - local-dev: all uncommented users (MongoDB not shared)
+#   - stage/prod: all uncommented users
+#
+# Only add users for microservices that actually exist in your project
+# ============================================================================
+
+# Example db users - REMOVE these lines if you don't use these services
+# user-service:USER_SERVICE_MONGO_PASSWORD:user_service_db:readWrite,dbAdmin
+# recipe-service:RECIPE_SERVICE_MONGO_PASSWORD:recipe_service_db:readWrite

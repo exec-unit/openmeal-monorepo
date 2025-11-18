@@ -1,0 +1,22 @@
+# ============================================================================
+# OpenMeal Nginx - HTTP-Only Configuration
+# ============================================================================
+# Used ONLY during initial SSL certificate acquisition.
+# After certificates are obtained, Ansible switches to default.conf.template
+# ============================================================================
+
+server {
+    listen 80;
+    server_name ${API_DOMAIN_NAME} ${KEYCLOAK_DOMAIN_NAME} ${GRAFANA_DOMAIN_NAME};
+
+    # Let's Encrypt domain validation endpoint
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    # Temporary response during certificate acquisition
+    location / {
+        return 200 "Certificate acquisition in progress...\n";
+        add_header Content-Type text/plain;
+    }
+}
