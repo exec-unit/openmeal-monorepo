@@ -1,0 +1,16 @@
+global:
+  scrape_interval: 30s
+  evaluation_interval: 1m
+
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # Future: Add Spring Boot microservices with actuator endpoints
+  # - job_name: 'openmeal-microservices'
+  #   static_configs:
+  #     - targets: ['openmeal-api-gateway:8080', 'openmeal-user-service:8080']
+  #   metrics_path: '/actuator/prometheus'
+  #   scrape_interval: 30s
