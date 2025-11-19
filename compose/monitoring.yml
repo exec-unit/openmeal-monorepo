@@ -1,0 +1,80 @@
+# ============================================================================
+# OpenMeal Monitoring Stack
+# ============================================================================
+# Prometheus and Grafana for metrics collection and visualization.
+# Activated via 'monitoring' profile (prod environment only).
+# ============================================================================
+
+volumes:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  default:
+    name: ${DOCKER_NETWORK_NAME:-openmeal_net}
+    external: ${DOCKER_NETWORK_EXTERNAL:-false}
+
+services:
+  # Prometheus - Metrics collection and time-series database
+  prometheus:
+    container_name: ${CONTAINER_PREFIX:-openmeal}-prometheus
+    image: prom/prometheus:v3.7.3
+    profiles: ["monitoring"]
+    restart: always
+    networks:
+      - default
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./config/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=7d"
+      - "--storage.tsdb.wal-compression"
+      - "--web.enable-lifecycle"
+      - "--web.page-title=OpenMeal Prometheus"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget --no-verbose --tries=1 --spider http://localhost:9090/-/healthy || exit 1",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # Grafana - Metrics visualization and dashboards
+  grafana:
+    container_name: ${CONTAINER_PREFIX:-openmeal}-grafana
+    image: grafana/grafana-oss:11.5.8
+    profiles: ["monitoring"]
+    restart: always
+    networks:
+      - default
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./config/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_RENDERING_SERVER_URL: "none"
+      GF_LOG_LEVEL: "warn"
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -q --spider http://localhost:3000/api/health || exit 1",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

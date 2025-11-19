@@ -1,0 +1,9 @@
+# MinIO Users and Buckets Configuration
+# Format: username:password:buckets:policy
+# Buckets: comma-separated list of bucket names
+# Policy: readwrite, readonly, writeonly, or custom policy name
+# Lines starting with # are comments and will be ignored
+
+# Example microservice users (uncomment when needed)
+# media-service:MEDIA_SERVICE_MINIO_PASSWORD:media-uploads,media-processed:readwrite
+# backup-service:BACKUP_SERVICE_MINIO_PASSWORD:backups:readwrite

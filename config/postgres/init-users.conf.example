@@ -1,0 +1,22 @@
+# ============================================================================
+# PostgreSQL Users and Databases Configuration
+# ============================================================================
+# Format: username:password_env_var:database
+#
+# Lines starting with # are comments and will be ignored
+# Empty lines are ignored
+#
+# Environment-based activation:
+#   - local-dev: all uncommented users except keycloak (uses shared-dev)
+#   - shared-dev: only keycloak user
+#   - stage/prod: all uncommented users
+#
+# Only add users for microservices that actually exist in your project
+# ============================================================================
+
+keycloak:KEYCLOAK_DB_PASSWORD:keycloak
+
+# Example db users - REMOVE these lines if you don't use these services
+# user-service:USER_SERVICE_DB_PASSWORD:user_service_db
+# payment-service:PAYMENT_SERVICE_DB_PASSWORD:payment_service_db
+# restaurant-service:RESTAURANT_SERVICE_DB_PASSWORD:restaurant_service_db
