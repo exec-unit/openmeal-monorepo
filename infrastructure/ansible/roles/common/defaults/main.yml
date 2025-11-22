@@ -1,0 +1,40 @@
+---
+# ============================================================================
+# Common Role - Default Variables
+# ============================================================================
+# These can be overridden in inventory group_vars
+# ============================================================================
+
+# System configuration
+common_timezone: "Etc/UTC"
+common_locale: "en_US.UTF-8"
+
+# Application user
+common_app_user: "openmeal"
+common_app_group: "openmeal"
+common_app_home: "/opt/openmeal"
+
+# Swap configuration
+common_swap_size_mb: 2048
+common_enable_swap: false
+
+# Base packages to install
+common_base_packages:
+  - curl
+  - wget
+  - git
+  - acl
+  - vim
+  - nano
+  - htop
+  - net-tools
+  - ca-certificates
+  - gnupg
+  - lsb-release
+  - apt-transport-https
+  - software-properties-common
+  - python3
+  - python3-pip
+  - rsync
+  - unzip
+  - jq

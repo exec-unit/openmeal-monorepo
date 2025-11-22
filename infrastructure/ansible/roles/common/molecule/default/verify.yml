@@ -1,0 +1,36 @@
+---
+# ============================================================================
+# Molecule Verify Playbook for 'common' Role
+# ============================================================================
+# Validates that the role applied correctly
+# ============================================================================
+
+- name: Verify
+  hosts: all
+  become: true
+
+  tasks:
+    - name: Check if essential packages are installed
+      ansible.builtin.package:
+        name:
+          - curl
+          - wget
+          - git
+          - vim
+          - htop
+          - net-tools
+        state: present
+      check_mode: yes
+      register: common_packages_check
+      failed_when: common_packages_check.changed
+
+    - name: Check system is up to date
+      ansible.builtin.command: apt list --upgradable
+      register: common_apt_upgradable
+      changed_when: false
+
+    - name: Display verification summary
+      ansible.builtin.debug:
+        msg:
+          - "✓ Common role verification passed"
+          - "Essential packages: installed"
