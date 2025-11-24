@@ -1,0 +1,15 @@
+---
+# ============================================================================
+# Molecule Converge Playbook for 'common' Role
+# ============================================================================
+# Applies the role to test instance
+# ============================================================================
+
+- name: Converge
+  hosts: all
+  become: true
+
+  tasks:
+    - name: Include docker role
+      ansible.builtin.include_role:
+        name: docker

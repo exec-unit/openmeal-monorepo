@@ -1,0 +1,42 @@
+---
+# ============================================================================
+# Molecule Verify Playbook for 'docker' Role
+# ============================================================================
+
+- name: Verify
+  hosts: all
+  become: true
+
+  tasks:
+    - name: Check if Docker is installed
+      ansible.builtin.command: docker --version
+      register: docker_version
+      changed_when: false
+
+    - name: Display Docker version
+      ansible.builtin.debug:
+        msg: "Docker version: {{ docker_version.stdout }}"
+
+    - name: Check if Docker Compose is installed
+      ansible.builtin.command: docker compose version
+      register: docker_compose_version
+      changed_when: false
+
+    - name: Display Docker Compose version
+      ansible.builtin.debug:
+        msg: "Docker Compose version: {{ docker_compose_version.stdout }}"
+
+    - name: Check Docker group exists
+      ansible.builtin.group:
+        name: docker
+        state: present
+      check_mode: yes
+      register: docker_group
+      failed_when: docker_group.changed
+
+    - name: Display verification summary
+      ansible.builtin.debug:
+        msg:
+          - "✓ Docker role verification passed"
+          - "Docker version: {{ docker_version.stdout }}"
+          - "Compose version: {{ docker_compose_version.stdout }}"
