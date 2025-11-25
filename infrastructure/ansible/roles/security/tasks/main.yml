@@ -1,0 +1,193 @@
+---
+# ============================================================================
+# Security Role - Main Tasks
+# ============================================================================
+# Configures firewall, SSH hardening, fail2ban, and automatic security updates
+# ============================================================================
+
+- name: Install security packages
+  ansible.builtin.apt:
+    name:
+      - ufw
+      - fail2ban
+      - unattended-upgrades
+      - apt-listchanges
+    state: present
+    update_cache: yes
+
+# ============================================================================
+# UFW Firewall Configuration
+# ============================================================================
+
+- name: Check UFW status
+  ansible.builtin.command: ufw status
+  register: security_ufw_status
+  changed_when: false
+  failed_when: false
+
+- name: Set UFW to default deny incoming (without reset)
+  community.general.ufw:
+    state: disabled
+  when:
+    - "'Status: inactive' in security_ufw_status.stdout"
+    - not mock_systemd | default(false)
+
+- name: Set UFW default policies
+  community.general.ufw:
+    direction: "{{ item.direction }}"
+    policy: "{{ item.policy }}"
+  loop:
+    - { direction: 'incoming', policy: 'deny' }
+    - { direction: 'outgoing', policy: 'allow' }
+    - { direction: 'routed', policy: 'deny' }
+  when: not mock_systemd | default(false)
+
+- name: Allow SSH before enabling UFW (prevent lockout)
+  community.general.ufw:
+    rule: allow
+    port: "{{ security_ssh_port }}"
+    proto: tcp
+    comment: "SSH access"
+  when: not mock_systemd | default(false)
+
+- name: Allow configured ports through UFW
+  community.general.ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: tcp
+  loop: "{{ security_ufw_allowed_ports }}"
+  when:
+    - item != security_ssh_port
+    - not mock_systemd | default(false)
+
+- name: Enable UFW
+  community.general.ufw:
+    state: enabled
+  when: not mock_systemd | default(false)
+
+- name: Ensure UFW is started and enabled
+  ansible.builtin.systemd:
+    name: ufw
+    state: started
+    enabled: yes
+  when: not mock_systemd | default(false)
+
+# ============================================================================
+# SSH Hardening
+# ============================================================================
+
+- name: Backup original sshd_config
+  ansible.builtin.copy:
+    src: /etc/ssh/sshd_config
+    dest: /etc/ssh/sshd_config.backup
+    remote_src: yes
+    force: no
+    mode: '0600'
+
+- name: Configure SSH - Disable root login
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?PermitRootLogin'
+    line: "PermitRootLogin {{ security_ssh_permit_root_login }}"
+    state: present
+  notify: Restart SSH
+
+- name: Configure SSH - Disable password authentication
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?PasswordAuthentication'
+    line: "PasswordAuthentication {{ security_ssh_password_authentication }}"
+    state: present
+  notify: Restart SSH
+
+- name: Configure SSH - Enable public key authentication
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?PubkeyAuthentication'
+    line: "PubkeyAuthentication {{ security_ssh_pubkey_authentication }}"
+    state: present
+  notify: Restart SSH
+
+- name: Configure SSH - Disable empty passwords
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?PermitEmptyPasswords'
+    line: "PermitEmptyPasswords no"
+    state: present
+  notify: Restart SSH
+
+- name: Configure SSH - Set port
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?Port'
+    line: "Port {{ security_ssh_port }}"
+    state: present
+  notify: Restart SSH
+
+- name: Configure SSH - Set MaxAuthTries
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?MaxAuthTries'
+    line: "MaxAuthTries {{ security_ssh_max_auth_tries }}"
+    state: present
+  notify: Restart SSH
+
+# ============================================================================
+# Fail2ban Configuration
+# ============================================================================
+
+- name: Configure fail2ban for SSH
+  ansible.builtin.copy:
+    content: |
+      [sshd]
+      enabled = true
+      port = {{ security_ssh_port }}
+      filter = sshd
+      logpath = /var/log/auth.log
+      maxretry = {{ security_fail2ban_maxretry }}
+      bantime = {{ security_fail2ban_bantime }}
+      findtime = {{ security_fail2ban_findtime }}
+    dest: /etc/fail2ban/jail.d/sshd.conf
+    mode: '0644'
+  when: security_fail2ban_enabled
+  notify: Restart fail2ban
+
+- name: Ensure fail2ban is started and enabled
+  ansible.builtin.systemd:
+    name: fail2ban
+    state: started
+    enabled: yes
+  when:
+    - not mock_systemd | default(false)
+    - security_fail2ban_enabled
+
+# ============================================================================
+# Unattended Upgrades Configuration
+# ============================================================================
+
+- name: Configure unattended-upgrades
+  ansible.builtin.template:
+    src: 50unattended-upgrades.j2
+    dest: /etc/apt/apt.conf.d/50unattended-upgrades
+    mode: '0644'
+  when: security_unattended_upgrades
+
+- name: Enable automatic updates
+  ansible.builtin.copy:
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Download-Upgradeable-Packages "1";
+      APT::Periodic::AutocleanInterval "7";
+      APT::Periodic::Unattended-Upgrade "1";
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    mode: '0644'
+  when: security_unattended_upgrades
+
+- name: Display security configuration summary
+  ansible.builtin.debug:
+    msg:
+      - "Security configuration completed"
+      - "UFW enabled with allowed ports: {{ security_ufw_allowed_ports }}"
+      - "SSH hardening applied (root login: {{ security_ssh_permit_root_login }})"
+      - "Fail2ban enabled: {{ security_fail2ban_enabled }}"
+      - "Automatic security updates: {{ security_unattended_upgrades }}"
