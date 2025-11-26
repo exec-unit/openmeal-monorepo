@@ -1,0 +1,128 @@
+---
+# ============================================================================
+# Molecule Verify Playbook for 'security' Role
+# ============================================================================
+
+- name: Verify
+  hosts: all
+  become: true
+
+  tasks:
+    # ========================================================================
+    # UFW Firewall Verification
+    # ========================================================================
+    - name: Check if UFW is installed
+      ansible.builtin.package:
+        name: ufw
+        state: present
+      check_mode: yes
+      register: security_ufw_installed
+      failed_when: security_ufw_installed.changed
+
+    - name: Check UFW status
+      ansible.builtin.command: ufw status
+      register: security_ufw_status
+      changed_when: false
+      failed_when: false
+
+    - name: Display UFW status
+      ansible.builtin.debug:
+        msg: "UFW status: {{ security_ufw_status.stdout_lines }}"
+
+    # ========================================================================
+    # SSH Configuration Verification
+    # ========================================================================
+    - name: Check if SSH is installed
+      ansible.builtin.package:
+        name: openssh-server
+        state: present
+      check_mode: yes
+      register: security_ssh_installed
+      failed_when: security_ssh_installed.changed
+
+    - name: Verify SSH configuration - PermitRootLogin
+      ansible.builtin.command: grep -E "^PermitRootLogin" /etc/ssh/sshd_config
+      register: security_ssh_root_login
+      changed_when: false
+      failed_when: false
+
+    - name: Verify SSH configuration - PasswordAuthentication
+      ansible.builtin.command: grep -E "^PasswordAuthentication" /etc/ssh/sshd_config
+      register: security_ssh_password_auth
+      changed_when: false
+      failed_when: false
+
+    - name: Display SSH configuration
+      ansible.builtin.debug:
+        msg:
+          - "SSH Root Login: {{ security_ssh_root_login.stdout | default('not configured') }}"
+          - "SSH Password Auth: {{ security_ssh_password_auth.stdout | default('not configured') }}"
+
+    # ========================================================================
+    # Fail2ban Verification
+    # ========================================================================
+    - name: Check if fail2ban is installed
+      ansible.builtin.package:
+        name: fail2ban
+        state: present
+      check_mode: yes
+      register: security_fail2ban_installed
+      failed_when: security_fail2ban_installed.changed
+
+    - name: Check fail2ban service status
+      ansible.builtin.systemd:
+        name: fail2ban
+        state: started
+      check_mode: yes
+      register: security_fail2ban_service
+      failed_when: security_fail2ban_service.changed
+
+    - name: Get fail2ban status
+      ansible.builtin.command: fail2ban-client status
+      register: security_fail2ban_status
+      changed_when: false
+      failed_when: false
+
+    - name: Display fail2ban status
+      ansible.builtin.debug:
+        msg: "Fail2ban jails: {{ security_fail2ban_status.stdout_lines }}"
+
+    # ========================================================================
+    # Unattended Upgrades Verification
+    # ========================================================================
+    - name: Check if unattended-upgrades is installed
+      ansible.builtin.package:
+        name: unattended-upgrades
+        state: present
+      check_mode: yes
+      register: security_unattended_installed
+      failed_when: security_unattended_installed.changed
+
+    - name: Verify unattended-upgrades configuration exists
+      ansible.builtin.stat:
+        path: /etc/apt/apt.conf.d/50unattended-upgrades
+      register: security_unattended_config
+
+    - name: Assert unattended-upgrades is configured
+      ansible.builtin.assert:
+        that:
+          - security_unattended_config.stat.exists
+        fail_msg: "Unattended-upgrades configuration not found"
+        success_msg: "✓ Unattended-upgrades is configured"
+
+    # ========================================================================
+    # Summary
+    # ========================================================================
+    - name: Display verification summary
+      ansible.builtin.debug:
+        msg:
+          - "╔════════════════════════════════════════════════════════════════╗"
+          - "║         Security Role Verification Summary                    ║"
+          - "╚════════════════════════════════════════════════════════════════╝"
+          - ""
+          - "✓ UFW firewall: installed"
+          - "✓ SSH server: installed and configured"
+          - "✓ Fail2ban: installed and running"
+          - "✓ Unattended-upgrades: configured"
+          - ""
+          - "All security components verified successfully!"

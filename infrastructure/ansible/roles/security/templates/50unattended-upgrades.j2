@@ -1,0 +1,18 @@
+// Automatically upgrade packages from these origin patterns
+Unattended-Upgrade::Origins-Pattern {
+    "origin=Debian,codename=${distro_codename},label=Debian-Security";
+    "origin=Debian,codename=${distro_codename}-security,label=Debian-Security";
+};
+
+// List of packages to not update
+Unattended-Upgrade::Package-Blacklist {
+};
+
+// Do automatic removal of unused dependencies
+Unattended-Upgrade::Remove-Unused-Dependencies "true";
+
+// Automatically reboot *WITHOUT CONFIRMATION* if required
+Unattended-Upgrade::Automatic-Reboot "{{ security_auto_reboot | lower }}";
+
+// If automatic reboot is enabled and needed, reboot at the specific time
+Unattended-Upgrade::Automatic-Reboot-Time "{{ security_auto_reboot_time }}";

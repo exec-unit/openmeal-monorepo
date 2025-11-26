@@ -1,0 +1,134 @@
+---
+# ============================================================================
+# Docker Role - Main Tasks
+# ============================================================================
+# Installs Docker Engine and Docker Compose v2 on Debian 12
+# Skips installation if Docker is already present
+# ============================================================================
+
+- name: Check if Docker is already installed
+  ansible.builtin.command: docker --version
+  register: docker_installed
+  changed_when: false
+  failed_when: false
+
+- name: Display Docker installation status
+  ansible.builtin.debug:
+    msg: "Docker is already installed: {{ docker_installed.stdout }}"
+  when: docker_installed.rc == 0
+
+- name: Skip Docker installation if already present
+  ansible.builtin.debug:
+    msg: "Docker already installed, skipping installation steps"
+  when: docker_installed.rc == 0
+
+- name: Install Docker prerequisites
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - curl
+    state: present
+    update_cache: yes
+  when: docker_installed.rc != 0
+
+- name: Create directory for Docker GPG key
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: '0755'
+  when: docker_installed.rc != 0
+
+- name: Check if Docker GPG key exists
+  ansible.builtin.stat:
+    path: /etc/apt/keyrings/docker.asc
+  register: docker_gpg_key
+  when: docker_installed.rc != 0
+
+- name: Download Docker GPG key
+  ansible.builtin.get_url:
+    url: https://download.docker.com/linux/debian/gpg
+    dest: /etc/apt/keyrings/docker.asc
+    mode: '0644'
+  when:
+    - docker_installed.rc != 0
+    - not docker_gpg_key.stat.exists
+  retries: 3
+  delay: 5
+
+- name: Add Docker repository using docker.sources
+  ansible.builtin.copy:
+    content: |
+      Types: deb
+      URIs: https://download.docker.com/linux/debian
+      Suites: {{ ansible_distribution_release }}
+      Components: stable
+      Signed-By: /etc/apt/keyrings/docker.asc
+    dest: /etc/apt/sources.list.d/docker.sources
+    mode: '0644'
+  when: docker_installed.rc != 0
+  register: docker_repo_added
+
+- name: Update apt cache after adding Docker repository
+  ansible.builtin.apt:
+    update_cache: yes
+  when:
+    - docker_installed.rc != 0
+    - docker_repo_added is changed
+  retries: 3
+  delay: 5
+
+- name: Install Docker packages
+  ansible.builtin.apt:
+    name: "{{ docker_packages }}"
+    state: present
+    update_cache: yes
+  retries: 3
+  delay: 5
+  register: docker_install
+  until: docker_install is success
+  when: docker_installed.rc != 0
+
+- name: Ensure Docker daemon configuration directory exists
+  ansible.builtin.file:
+    path: /etc/docker
+    state: directory
+    mode: '0755'
+
+- name: Configure Docker daemon
+  ansible.builtin.copy:
+    content: "{{ docker_daemon_config | to_nice_json }}"
+    dest: /etc/docker/daemon.json
+    mode: '0644'
+  notify: Restart Docker
+
+- name: Ensure Docker service is started and enabled
+  ansible.builtin.systemd:
+    name: docker
+    state: started
+    enabled: yes
+    daemon_reload: yes
+  when: not mock_systemd | default(false)
+
+- name: Add users to docker group
+  ansible.builtin.user:
+    name: "{{ item }}"
+    groups: docker
+    append: yes
+  loop: "{{ docker_users }}"
+  when: docker_users is defined
+
+- name: Verify Docker installation
+  ansible.builtin.command: docker --version
+  register: docker_version
+  changed_when: false
+
+- name: Verify Docker Compose installation
+  ansible.builtin.command: docker compose version
+  register: docker_compose_version
+  changed_when: false
+
+- name: Display Docker versions
+  ansible.builtin.debug:
+    msg:
+      - "Docker installed: {{ docker_version.stdout }}"
+      - "Docker Compose installed: {{ docker_compose_version.stdout }}"
