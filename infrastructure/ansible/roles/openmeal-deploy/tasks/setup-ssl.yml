@@ -1,0 +1,210 @@
+---
+# ============================================================================
+# Setup SSL Certificates Task
+# ============================================================================
+# Initializes Let's Encrypt SSL certificates via Makefile
+# Runs for shared-dev, stage and prod environments
+# Includes retry logic and self-signed fallback
+# ============================================================================
+
+- name: Check if SSL certificates already exist
+  ansible.builtin.stat:
+    path: >
+      /var/lib/docker/volumes/{{ compose_project_name | default('openmeal-backend') }}_certbot_etc/_data/live/{{ api_domain_name }}
+  register: ssl_cert_check
+
+- name: Display SSL certificate status
+  ansible.builtin.debug:
+    msg: >
+      SSL certificates {{ 'already exist - skipping initialization'
+      if ssl_cert_check.stat.exists else 'will be initialized' }}
+
+- name: SSL Certificate Initialization
+  when: not ssl_cert_check.stat.exists
+  block:
+    # ========================================================================
+    # Prepare for ACME Challenge
+    # ========================================================================
+    - name: Ensure nginx is using HTTP-only config for certificate acquisition
+      ansible.builtin.lineinfile:
+        path: "{{ app_home }}/.env"
+        regexp: "^NGINX_CONFIG_TEMPLATE="
+        line: "NGINX_CONFIG_TEMPLATE=default-http-only.conf.template"
+        state: present
+
+    - name: Start nginx with HTTP-only config for ACME challenge
+      ansible.builtin.command:
+        cmd: "make up"
+        chdir: "{{ app_home }}"
+      become: true
+      become_user: "{{ app_user }}"
+      environment:
+        PATH: "/usr/local/bin:/usr/bin:/bin"
+      changed_when: true
+      register: nginx_start
+      retries: 2
+      delay: 5
+      until: nginx_start.rc == 0
+
+    - name: Wait for nginx to be ready
+      ansible.builtin.wait_for:
+        port: 80
+        delay: 5
+        timeout: 60
+        msg: "Nginx failed to start on port 80"
+
+    - name: Get certbot_webroot volume path
+      ansible.builtin.shell: |
+        docker volume inspect {{ compose_project_name | default('openmeal-backend') }}_certbot_webroot --format '{{ '{{' }} .Mountpoint {{ '}}' }}'
+      become: true
+      register: certbot_volume_path
+      changed_when: false
+
+    - name: Create ACME challenge directory in certbot volume
+      ansible.builtin.file:
+        path: "{{ certbot_volume_path.stdout }}/.well-known/acme-challenge"
+        state: directory
+        mode: "0755"
+      become: true
+
+    - name: Verify ACME challenge directory is accessible from nginx
+      ansible.builtin.command:
+        cmd: >
+          docker exec {{ container_prefix }}-nginx
+          ls -la /var/www/certbot/.well-known/acme-challenge
+      become: true
+      register: acme_dir_check
+      changed_when: false
+      failed_when: acme_dir_check.rc != 0
+
+    - name: Create test file for ACME challenge verification
+      ansible.builtin.copy:
+        content: "test"
+        dest: "{{ certbot_volume_path.stdout }}/.well-known/acme-challenge/test"
+        mode: "0644"
+      become: true
+
+    - name: Verify nginx is responding to ACME challenge
+      ansible.builtin.uri:
+        url: "http://{{ api_domain_name }}/.well-known/acme-challenge/test"
+        status_code: [200]
+        timeout: 10
+        return_content: yes
+      register: nginx_health
+      failed_when: nginx_health.status != 200
+
+    - name: Display ACME challenge test result
+      ansible.builtin.debug:
+        msg: "✓ Nginx successfully serving ACME challenge files"
+
+    # ========================================================================
+    # Let's Encrypt Certificate Acquisition with Retry
+    # ========================================================================
+    - name: Initialize SSL certificates via Makefile (with retry)
+      ansible.builtin.command:
+        cmd: make ssl-cert-init
+        chdir: "{{ app_home }}"
+      become: true
+      become_user: "{{ app_user }}"
+      environment:
+        SSL_EMAIL: "{{ ssl_email }}"
+        API_DOMAIN_NAME: "{{ api_domain_name }}"
+        KEYCLOAK_DOMAIN_NAME: "{{ keycloak_domain_name }}"
+        GRAFANA_DOMAIN_NAME: "{{ grafana_domain_name | default('') }}"
+        SSL_STAGING: "{{ ssl_staging | string | lower }}"
+        PATH: "/usr/local/bin:/usr/bin:/bin"
+      register: ssl_init_result
+      retries: 3
+      delay: 30
+      until: ssl_init_result.rc == 0
+      changed_when: ssl_init_result.rc == 0
+      failed_when: ssl_init_result.rc != 0
+
+    - name: Display SSL initialization result
+      ansible.builtin.debug:
+        msg: "{{ ssl_init_result.stdout_lines }}"
+
+    - name: Remove Grafana server block if not prod
+      ansible.builtin.blockinfile:
+        path: "{{ app_home }}/config/nginx/default.conf.template"
+        marker: "# {mark} ANSIBLE MANAGED GRAFANA BLOCK"
+        block: ""
+        state: absent
+      when: deployment_type != 'prod'
+
+    - name: Wait for nginx to restart with HTTPS config
+      ansible.builtin.pause:
+        seconds: 5
+
+    - name: Verify HTTPS is working
+      ansible.builtin.uri:
+        url: "https://{{ api_domain_name }}"
+        validate_certs: no
+        status_code: [200, 301, 302, 404, 502, 503]
+        timeout: 10
+      register: https_check
+      failed_when: false
+
+    - name: Display HTTPS status
+      ansible.builtin.debug:
+        msg: >-
+          {{ '✓ HTTPS is working on ' + api_domain_name if https_check.status is defined and https_check.status in [200, 301, 302]
+          else '⚠ HTTPS verification skipped or failed - check manually' }}
+
+  rescue:
+    - name: Display SSL setup failure
+      ansible.builtin.debug:
+        msg:
+          - "✗ SSL certificate acquisition failed"
+          - "Error: {{ ansible_failed_result.msg | default('Unknown error') }}"
+          - ""
+          - "Possible reasons:"
+          - "  - DNS not properly configured (domains must point to this server)"
+          - "  - Port 80 not accessible from internet"
+          - "  - Let's Encrypt rate limits reached"
+          - "  - Network connectivity issues"
+          - ""
+          - "CRITICAL: SSL certificates are required for {{ deployment_type }} environment"
+          - "Deployment cannot continue without valid SSL certificates"
+
+    - name: Fail deployment if SSL is required
+      ansible.builtin.fail:
+        msg: "SSL certificate acquisition failed. Cannot deploy {{ deployment_type }} environment without SSL."
+
+# ============================================================================
+# SSL Auto-Renewal Setup
+# ============================================================================
+- name: Setup automatic SSL certificate renewal
+  ansible.builtin.cron:
+    name: "OpenMeal SSL Certificate Renewal ({{ item.time }})"
+    minute: "{{ item.minute }}"
+    hour: "{{ item.hour }}"
+    user: root
+    job: "{{ app_home }}/scripts/ssl-renew-cron.sh renew >> /var/log/openmeal-ssl-renew.log 2>&1"
+    state: present
+  loop:
+    - { time: "morning", hour: "3", minute: "0" }
+    - { time: "afternoon", hour: "15", minute: "0" }
+  when: deployment_type in ['shared-dev', 'stage', 'prod']
+
+# ============================================================================
+# Final Summary
+# ============================================================================
+- name: Display SSL setup summary
+  ansible.builtin.debug:
+    msg:
+      - "╔════════════════════════════════════════════════════════════════╗"
+      - "║              SSL Certificate Configuration                     ║"
+      - "╚════════════════════════════════════════════════════════════════╝"
+      - ""
+      - "Certificate Type: {{ ssl_type | default('Lets Encrypt') }}"
+      - "API Domain: {{ api_domain_name }}"
+      - "Keycloak Domain: {{ keycloak_domain_name }}"
+      - "{% if deployment_type == 'prod' and grafana_domain_name is defined and grafana_domain_name != 'localhost' %}Grafana Domain: {{ grafana_domain_name }}{% endif %}"
+      - "Auto-renewal: Enabled (cron: 3:00 AM, 3:00 PM)"
+      - >
+        {{ '⚠ WARNING: Using self-signed certificates - browsers will show
+        security warnings' if ssl_type | default('') == 'self-signed' else '' }}
+      - >
+        {{ '⚠ WARNING: SSL not configured - services accessible via HTTP only'
+        if ssl_type | default('') == 'none' else '' }}

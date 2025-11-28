@@ -1,0 +1,82 @@
+---
+# ============================================================================
+# Generate Configuration Files Task
+# ============================================================================
+# Creates .env file from .env.example with secrets and deployment overrides
+# Uses automatic discovery for vault_* variables - no hardcoded lists
+# ============================================================================
+
+- name: Copy .env.example from project root
+  ansible.builtin.copy:
+    src: "{{ project_root }}/.env.example"
+    dest: "{{ app_home }}/.env"
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: "0600"
+
+- name: Get all vault variables
+  ansible.builtin.set_fact:
+    vault_vars: "{{ vars | dict2items | selectattr('key', 'match', '^vault_.*') | list }}"
+
+- name: Replace secrets in .env from vault
+  ansible.builtin.replace:
+    path: "{{ app_home }}/.env"
+    regexp: "^{{ item.key | upper | regex_replace('^VAULT_', '') }}=.*"
+    replace: "{{ item.key | upper | regex_replace('^VAULT_', '') }}={{ item.value }}"
+  loop: "{{ vault_vars }}"
+  loop_control:
+    label: "{{ item.key }}"
+  when:
+    - vault_vars | length > 0
+
+- name: Override deployment-specific variables in .env
+  ansible.builtin.include_tasks: override-env-var.yml
+  loop: "{{ env_var_mapping | dict2items }}"
+  loop_control:
+    loop_var: var_mapping
+
+- name: Verify .env file was created
+  ansible.builtin.stat:
+    path: "{{ app_home }}/.env"
+  register: env_file_stat
+
+- name: Fail if .env was not created
+  ansible.builtin.fail:
+    msg: "Failed to generate .env file"
+  when:
+    - not env_file_stat.stat.exists
+
+- name: Run database config preparation script
+  ansible.builtin.shell: |
+    set -a
+    source .env
+    set +a
+    ENVIRONMENT="{{ deployment_type }}" bash scripts/prepare-db-configs.sh
+  args:
+    chdir: "{{ app_home }}"
+    executable: /bin/bash
+  become: true
+  become_user: "{{ app_user }}"
+  register: db_config_result
+  changed_when: true
+
+- name: Display database config preparation result
+  ansible.builtin.debug:
+    msg: "{{ db_config_result.stdout_lines }}"
+
+- name: Set nginx config template if override provided
+  ansible.builtin.lineinfile:
+    path: "{{ app_home }}/.env"
+    regexp: "^NGINX_CONFIG_TEMPLATE="
+    line: "NGINX_CONFIG_TEMPLATE={{ nginx_template_override }}"
+    state: present
+  when: nginx_template_override is defined
+
+- name: Display config generation summary
+  ansible.builtin.debug:
+    msg:
+      - "✓ Configuration files generated"
+      - ".env created at {{ app_home }}/.env"
+      - "Deployment type: {{ deployment_type }}"
+      - "Database configs prepared for: {{ deployment_type }}"
+      - "{{ 'Nginx template: ' + nginx_template_override if nginx_template_override is defined else '' }}"

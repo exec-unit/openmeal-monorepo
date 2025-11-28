@@ -1,0 +1,49 @@
+---
+# ============================================================================
+# OpenMeal Deploy Role - Main Tasks
+# ============================================================================
+# Orchestrates the deployment of OpenMeal application
+# Delegates service management to Makefile
+#
+# Available tags:
+#   sync       - Only sync files
+#   config     - Only generate configs
+#   ssl        - Only setup SSL
+#   services   - Only start/restart services
+#   quick      - Skip sync, only config + services (fast update)
+# ============================================================================
+
+- name: Display deployment information
+  ansible.builtin.debug:
+    msg:
+      - "Deploying OpenMeal to {{ deployment_type }} environment"
+      - "Application home: {{ app_home }}"
+      - "User: {{ app_user }}"
+  tags: [always]
+
+- name: Sync project files to server
+  ansible.builtin.import_tasks: sync-files.yml
+  tags: [sync, files]
+
+- name: Generate configuration files
+  ansible.builtin.import_tasks: generate-configs.yml
+  tags: [config, generate, quick]
+
+- name: Setup SSL certificates
+  ansible.builtin.import_tasks: setup-ssl.yml
+  tags: [ssl, certificates]
+  when:
+    - deployment_type in ['shared-dev', 'stage', 'prod']
+
+- name: Start services via Makefile
+  ansible.builtin.import_tasks: start-services.yml
+  tags: [services, start, quick]
+
+- name: Display deployment summary
+  ansible.builtin.debug:
+    msg:
+      - "✓ OpenMeal {{ deployment_type }} deployment completed"
+      - "Access your application at: https://{{ api_domain_name }}"
+      - "Keycloak admin: https://{{ keycloak_domain_name }}"
+      - "Grafana: https://{{ grafana_domain_name }}"
+  tags: [always]

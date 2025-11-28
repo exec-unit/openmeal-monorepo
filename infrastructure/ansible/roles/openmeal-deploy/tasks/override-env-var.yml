@@ -1,0 +1,30 @@
+---
+# ============================================================================
+# Override Environment Variable Task
+# ============================================================================
+# Handles both 1:1 and 1:many variable mappings
+# Called from generate-configs.yml for each mapping in env_var_mapping
+# ============================================================================
+
+- name: Replace single env variable
+  ansible.builtin.replace:
+    path: "{{ app_home }}/.env"
+    regexp: "^{{ var_mapping.value }}=.*"
+    replace: "{{ var_mapping.value }}={{ vars[var_mapping.key] }}"
+  when:
+    - var_mapping.value is string
+    - vars[var_mapping.key] is defined
+    - vars[var_mapping.key] != ""
+
+- name: Replace multiple env variables from one ansible var
+  ansible.builtin.replace:
+    path: "{{ app_home }}/.env"
+    regexp: "^{{ env_var }}=.*"
+    replace: "{{ env_var }}={{ vars[var_mapping.key] }}"
+  loop: "{{ var_mapping.value if var_mapping.value is not string else [] }}"
+  loop_control:
+    loop_var: env_var
+  when:
+    - var_mapping.value is not string
+    - vars[var_mapping.key] is defined
+    - vars[var_mapping.key] != ""
