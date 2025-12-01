@@ -1,0 +1,145 @@
+---
+# ============================================================================
+# Backup Role - Main Tasks
+# ============================================================================
+# Automated database backups using Restic with S3 backend
+# PostgreSQL at 2:00, MongoDB at 3:00, cleanup at 4:00
+# ============================================================================
+
+- name: Install restic backup tool
+  ansible.builtin.apt:
+    name:
+      - restic
+      - postgresql-client
+      - cron
+    state: present
+    update_cache: yes
+  retries: 3
+  delay: 5
+
+- name: Ensure cron service is running
+  ansible.builtin.service:
+    name: cron
+    state: started
+    enabled: yes
+
+- name: Ensure backups directory exists
+  ansible.builtin.file:
+    path: "{{ backup_app_home }}/backups"
+    state: directory
+    owner: "{{ backup_app_user }}"
+    group: "{{ backup_app_user }}"
+    mode: "0755"
+
+- name: Create restic configuration directory
+  ansible.builtin.file:
+    path: "{{ backup_app_home }}/.restic"
+    state: directory
+    owner: "{{ backup_app_user }}"
+    group: "{{ backup_app_user }}"
+    mode: "0700"
+
+- name: Create restic environment file
+  ansible.builtin.template:
+    src: restic-env.j2
+    dest: "{{ backup_app_home }}/.restic/env"
+    owner: "{{ backup_app_user }}"
+    group: "{{ backup_app_user }}"
+    mode: "0600"
+  when: backup_enabled
+
+- name: Check if restic repository is initialized
+  ansible.builtin.command:
+    cmd: restic snapshots
+  environment:
+    RESTIC_REPOSITORY: "{{ backup_restic_repository }}"
+    RESTIC_PASSWORD: "{{ vault_restic_password }}"
+    AWS_ACCESS_KEY_ID: "{{ vault_s3_access_key_id }}"
+    AWS_SECRET_ACCESS_KEY: "{{ vault_s3_secret_access_key }}"
+    AWS_DEFAULT_REGION: "{{ backup_s3_region }}"
+  become: true
+  become_user: "{{ backup_app_user }}"
+  register: backup_restic_check
+  changed_when: false
+  failed_when: false
+  when: backup_enabled
+
+- name: Initialize restic repository
+  ansible.builtin.command:
+    cmd: restic init
+  environment:
+    RESTIC_REPOSITORY: "{{ backup_restic_repository }}"
+    RESTIC_PASSWORD: "{{ vault_restic_password }}"
+    AWS_ACCESS_KEY_ID: "{{ vault_s3_access_key_id }}"
+    AWS_SECRET_ACCESS_KEY: "{{ vault_s3_secret_access_key }}"
+    AWS_DEFAULT_REGION: "{{ backup_s3_region }}"
+  become: true
+  become_user: "{{ backup_app_user }}"
+  changed_when: true
+  when:
+    - backup_enabled
+    - backup_restic_check.rc != 0
+
+- name: Create PostgreSQL backup script
+  ansible.builtin.template:
+    src: backup-postgres.sh.j2
+    dest: "{{ backup_app_home }}/.restic/backup-postgres.sh"
+    owner: "{{ backup_app_user }}"
+    group: "{{ backup_app_user }}"
+    mode: "0750"
+  when: backup_enabled
+
+- name: Create MongoDB backup script
+  ansible.builtin.template:
+    src: backup-mongo.sh.j2
+    dest: "{{ backup_app_home }}/.restic/backup-mongo.sh"
+    owner: "{{ backup_app_user }}"
+    group: "{{ backup_app_user }}"
+    mode: "0750"
+  when: backup_enabled
+
+- name: Create restic cleanup script
+  ansible.builtin.template:
+    src: backup-cleanup.sh.j2
+    dest: "{{ backup_app_home }}/.restic/backup-cleanup.sh"
+    owner: "{{ backup_app_user }}"
+    group: "{{ backup_app_user }}"
+    mode: "0750"
+  when: backup_enabled
+
+- name: Setup PostgreSQL backup cron job
+  ansible.builtin.cron:
+    name: "OpenMeal PostgreSQL Backup"
+    minute: "{{ backup_postgres_minute }}"
+    hour: "{{ backup_postgres_hour }}"
+    user: "{{ backup_app_user }}"
+    job: "{{ backup_app_home }}/.restic/backup-postgres.sh >> {{ backup_app_home }}/backups/postgres-backup.log 2>&1"
+    state: "{{ 'present' if backup_enabled else 'absent' }}"
+
+- name: Setup MongoDB backup cron job
+  ansible.builtin.cron:
+    name: "OpenMeal MongoDB Backup"
+    minute: "{{ backup_mongo_minute }}"
+    hour: "{{ backup_mongo_hour }}"
+    user: "{{ backup_app_user }}"
+    job: "{{ backup_app_home }}/.restic/backup-mongo.sh >> {{ backup_app_home }}/backups/mongo-backup.log 2>&1"
+    state: "{{ 'present' if backup_enabled else 'absent' }}"
+
+- name: Setup backup cleanup cron job
+  ansible.builtin.cron:
+    name: "OpenMeal Backup Cleanup"
+    minute: "{{ backup_cleanup_minute }}"
+    hour: "{{ backup_cleanup_hour }}"
+    user: "{{ backup_app_user }}"
+    job: "{{ backup_app_home }}/.restic/backup-cleanup.sh >> {{ backup_app_home }}/backups/cleanup.log 2>&1"
+    state: "{{ 'present' if backup_enabled else 'absent' }}"
+
+- name: Display backup configuration summary
+  ansible.builtin.debug:
+    msg:
+      - "✓ Backup automation configured with Restic + S3"
+      - "PostgreSQL backup: {{ backup_postgres_hour }}:{{ backup_postgres_minute }}"
+      - "MongoDB backup: {{ backup_mongo_hour }}:{{ backup_mongo_minute }}"
+      - "Cleanup: {{ backup_cleanup_hour }}:{{ backup_cleanup_minute }}"
+      - "Repository: {{ backup_restic_repository }}"
+      - "Retention: {{ backup_restic_keep_daily }}d/{{ backup_restic_keep_weekly }}w/{{ backup_restic_keep_monthly }}m"

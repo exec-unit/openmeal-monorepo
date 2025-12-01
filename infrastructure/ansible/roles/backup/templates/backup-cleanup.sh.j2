@@ -1,0 +1,36 @@
+#!/bin/bash
+# ============================================================================
+# Restic Backup Cleanup Script
+# ============================================================================
+set -euo pipefail
+
+# Source restic environment
+source {{ backup_app_home }}/.restic/env
+
+echo "$(date): Starting backup cleanup..."
+
+# Apply retention policy
+restic forget \
+    --keep-daily {{ backup_restic_keep_daily }} \
+    --keep-weekly {{ backup_restic_keep_weekly }} \
+    --keep-monthly {{ backup_restic_keep_monthly }} \
+    --prune \
+    --host {{ inventory_hostname }}
+
+if [ $? -eq 0 ]; then
+    echo "$(date): ✓ Cleanup completed successfully"
+    echo "$(date): Retention policy: {{ backup_restic_keep_daily }}d/{{ backup_restic_keep_weekly }}w/{{ backup_restic_keep_monthly }}m"
+{% if backup_healthcheck_url %}
+    # Ping healthcheck URL if configured
+    curl -fsS --retry 3 "{{ backup_healthcheck_url }}/cleanup" > /dev/null || true
+{% endif %}
+else
+    echo "$(date): ERROR - Cleanup failed"
+    exit 1
+fi
+
+# Clean up local backup directory (remove files older than retention days)
+echo "$(date): Cleaning local backup directory..."
+find {{ backup_app_home }}/backups -name "postgres_*.sql" -mtime +{{ backup_retention_days }} -delete 2>/dev/null || true
+find {{ backup_app_home }}/backups -name "mongo_*.tar.gz" -mtime +{{ backup_retention_days }} -delete 2>/dev/null || true
+echo "$(date): ✓ Local cleanup completed"
