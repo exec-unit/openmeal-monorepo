@@ -1,0 +1,206 @@
+---
+# ============================================================================
+# OpenMeal - Full Deployment Playbook
+# ============================================================================
+# Performs complete deployment: server setup + application deployment
+#
+# Usage:
+#   ansible-playbook -i inventories/stage/hosts.yml playbooks/deploy.yml
+#
+# ============================================================================
+
+- name: Deploy OpenMeal Application
+  hosts: all
+  become: yes
+
+  vars_files:
+    - "{{ inventory_dir }}/group_vars/all.yml"
+    - "{{ inventory_dir }}/group_vars/vault.yml"
+
+  pre_tasks:
+    # ========================================================================
+    # Configuration Validation
+    # ========================================================================
+    - name: Verify deployment type is set
+      ansible.builtin.assert:
+        that:
+          - deployment_type is defined
+          - deployment_type in ['shared-dev', 'stage', 'prod']
+        fail_msg: "deployment_type must be set to shared-dev, stage, or prod"
+
+    # ========================================================================
+    # System Requirements Check
+    # ========================================================================
+    - name: Check system requirements
+      ansible.builtin.assert:
+        that:
+          - ansible_memtotal_mb >= 1024
+          - ansible_processor_vcpus >= 1
+        fail_msg: |
+          Insufficient system resources detected:
+          - Current RAM: {{ ansible_memtotal_mb }}MB (minimum: 1024MB)
+          - Current vCPUs: {{ ansible_processor_vcpus }} (minimum: 1)
+        success_msg: "✓ System resources check passed"
+
+    - name: Check available disk space
+      ansible.builtin.assert:
+        that:
+          - item.size_available > 5368709120
+        fail_msg: |
+          Insufficient disk space on {{ item.mount }}:
+          Available: {{ (item.size_available / 1024 / 1024 / 1024) | round(2) }}GB
+          Required: 5GB minimum
+        success_msg: "✓ Disk space check passed for {{ item.mount }}"
+      loop: "{{ ansible_mounts | selectattr('mount', 'equalto', '/') | list }}"
+      loop_control:
+        label: "{{ item.mount }}"
+
+    # ========================================================================
+    # DNS Validation (for SSL environments)
+    # ========================================================================
+    - name: Verify DNS resolution for API domain
+      ansible.builtin.command:
+        cmd: "dig +short {{ api_domain_name }} @8.8.8.8"
+      register: dns_api_check
+      changed_when: false
+      failed_when: false
+      when: deployment_type in ['stage', 'prod']
+
+    - name: Validate API domain DNS points to this server
+      ansible.builtin.assert:
+        that:
+          - dns_api_check.stdout | trim == ansible_default_ipv4.address or dns_api_check.stdout | trim == hostvars[inventory_hostname].ansible_host
+        fail_msg: |
+          DNS mismatch for {{ api_domain_name }}:
+          DNS resolves to: {{ dns_api_check.stdout | trim }}
+          Server IP: {{ ansible_default_ipv4.address }}
+          This will cause SSL certificate generation to fail!
+        success_msg: "✓ DNS correctly configured for {{ api_domain_name }}"
+      when:
+        - deployment_type in ['stage', 'prod']
+        - dns_api_check.stdout | trim != ""
+
+    - name: Verify DNS resolution for Keycloak domain
+      ansible.builtin.command:
+        cmd: "dig +short {{ keycloak_domain_name }} @8.8.8.8"
+      register: dns_keycloak_check
+      changed_when: false
+      failed_when: false
+      when: deployment_type in ['stage', 'prod']
+
+    - name: Validate Keycloak domain DNS points to this server
+      ansible.builtin.assert:
+        that:
+          - dns_keycloak_check.stdout | trim == ansible_default_ipv4.address or dns_keycloak_check.stdout | trim == hostvars[inventory_hostname].ansible_host
+        fail_msg: |
+          DNS mismatch for {{ keycloak_domain_name }}:
+          DNS resolves to: {{ dns_keycloak_check.stdout | trim }}
+          Server IP: {{ ansible_default_ipv4.address }}
+          This will cause SSL certificate generation to fail!
+        success_msg: "✓ DNS correctly configured for {{ keycloak_domain_name }}"
+      when:
+        - deployment_type in ['stage', 'prod']
+        - dns_keycloak_check.stdout | trim != ""
+
+    # ========================================================================
+    # Port Availability Check
+    # ========================================================================
+    - name: Check if critical ports are available
+      ansible.builtin.wait_for:
+        port: "{{ item }}"
+        state: stopped
+        timeout: 1
+      loop:
+        - 80
+        - 443
+      loop_control:
+        label: "Port {{ item }}"
+      register: port_check
+      failed_when: false
+      when: deployment_type in ['stage', 'prod']
+
+    - name: Warn if ports are already in use
+      ansible.builtin.debug:
+        msg: "⚠ Warning: Port {{ item.item }} is already in use. Existing services may conflict."
+      loop: "{{ port_check.results | default([]) }}"
+      loop_control:
+        label: "Port {{ item.item }}"
+      when:
+        - deployment_type in ['stage', 'prod']
+        - item.failed is defined
+        - item.failed
+
+    # ========================================================================
+    # SSL Prerequisites Check
+    # ========================================================================
+    - name: Verify SSL email is configured
+      ansible.builtin.assert:
+        that:
+          - ssl_email is defined
+          - ssl_email != ""
+          - ssl_email | regex_search('@') | length > 0
+        fail_msg: "SSL_EMAIL must be set to a valid email address for Let's Encrypt"
+        success_msg: "✓ SSL email configured: {{ ssl_email }}"
+      when: deployment_type in ['stage', 'prod']
+
+    # ========================================================================
+    # Deployment Information Display
+    # ========================================================================
+    - name: Display deployment information
+      ansible.builtin.debug:
+        msg:
+          - "╔════════════════════════════════════════════════════════════════╗"
+          - "║         OpenMeal Deployment - {{ deployment_type | upper }}{{ ' ' * (28 - deployment_type | length) }}║"
+          - "╚════════════════════════════════════════════════════════════════╝"
+          - ""
+          - "Target Servers: {{ ansible_play_hosts | join(', ') }}"
+          - "Environment: {{ deployment_type }}"
+          - "API Domain: {{ api_domain_name }}"
+          - "Keycloak Domain: {{ keycloak_domain_name }}"
+          - "{% if deployment_type == 'prod' and grafana_domain_name is defined %}Grafana Domain: {{ grafana_domain_name }}{% endif %}"
+          - "System: {{ ansible_distribution }} {{ ansible_distribution_version }}"
+          - "RAM: {{ ansible_memtotal_mb }}MB | vCPUs: {{ ansible_processor_vcpus }}"
+          - ""
+          - "✓ All pre-flight checks passed. Proceeding with deployment..."
+
+  roles:
+    - role: common
+      tags: [common, setup, system, never-skip]
+
+    - role: docker
+      tags: [docker, setup, system]
+
+    - role: security
+      tags: [security, setup, system]
+
+    - role: openmeal-deploy
+      tags: [deploy, infra, application, quick]
+
+    - role: backup
+      tags: [backup, maintenance]
+      when: deployment_type in ['stage', 'prod']
+
+  post_tasks:
+    - name: Wait for services to stabilize
+      ansible.builtin.pause:
+        seconds: 10
+
+    - name: Display service status
+      ansible.builtin.command: make ps
+      args:
+        chdir: "{{ app_home }}"
+      become_user: "{{ app_user }}"
+      register: service_status
+      changed_when: false
+
+    - name: Show running services
+      ansible.builtin.debug:
+        msg: "{{ service_status.stdout_lines }}"
+
+    - name: Display deployment summary
+      ansible.builtin.debug:
+        msg:
+          - "Deployment Completed!"
+          - "Environment: {{ deployment_type }}"
+          - "API: https://{{ api_domain_name }}"
+          - "Keycloak: https://{{ keycloak_domain_name }}"

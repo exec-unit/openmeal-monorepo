@@ -1,0 +1,112 @@
+---
+# ============================================================================
+# OpenMeal Deploy Role - Default Variables
+# ============================================================================
+
+app_home: "/opt/openmeal"
+app_user: "openmeal"
+app_group: "openmeal"
+
+deployment_type: "stage"
+container_prefix: "openmeal"
+
+api_domain_name: "localhost"
+keycloak_domain_name: "localhost"
+keycloak_hostname: "localhost"
+grafana_domain_name: "localhost"
+ssl_email: ""
+ssl_staging: "false"
+
+# Redpanda external access (only for shared-dev)
+redpanda_external_port: ""
+
+project_root: "{{ playbook_dir }}/../../.."
+
+# Build images flag
+build_images: false
+
+# ============================================================================
+# File Synchronization Configuration
+# ============================================================================
+# Centralized configuration for all files/directories to sync
+# Add new items here instead of hardcoding in tasks
+
+# Directories to synchronize (with rsync)
+sync_directories:
+  - name: "compose"
+    src: "compose"
+    dest: "compose"
+    delete: yes
+    rsync_opts:
+      - "--exclude=.git"
+      - "--exclude=*.swp"
+
+  - name: "config"
+    src: "config"
+    dest: "config"
+    delete: yes
+    rsync_opts:
+      - "--exclude=.git"
+      - "--exclude=*.swp"
+
+  - name: "scripts"
+    src: "scripts"
+    dest: "scripts"
+    delete: yes
+    rsync_opts:
+      - "--exclude=.git"
+
+  - name: "infrastructure/keycloak"
+    src: "infrastructure/keycloak"
+    dest: "infrastructure/keycloak"
+    delete: yes
+
+  - name: "makefiles"
+    src: "makefiles"
+    dest: "makefiles"
+    delete: yes
+    rsync_opts:
+      - "--exclude=.git"
+
+# Individual files to copy
+sync_files:
+  - name: "docker-compose.yml"
+    src: "docker-compose.yml"
+    dest: "docker-compose.yml"
+    mode: "0644"
+
+  - name: "Makefile"
+    src: "Makefile"
+    dest: "Makefile"
+    mode: "0644"
+
+# Directories to create on target
+ensure_directories:
+  - path: "{{ app_home }}"
+    mode: "0755"
+  - path: "{{ app_home }}/backups"
+    mode: "0755"
+  - path: "{{ app_home }}/logs"
+    mode: "0755"
+  - path: "{{ app_home }}/infrastructure"
+    mode: "0755"
+
+# ============================================================================
+# Environment Variable Mapping
+# ============================================================================
+# Mapping of Ansible variables to .env variables
+# Supports both 1:1 and 1:many mappings
+# Add new mappings here when introducing deployment-specific overrides
+
+env_var_mapping:
+  deployment_type: ENVIRONMENT
+  container_prefix: CONTAINER_PREFIX
+  api_domain_name:
+    - API_DOMAIN_NAME
+    - REDPANDA_ADVERTISED_HOST
+  keycloak_domain_name: KEYCLOAK_DOMAIN_NAME
+  keycloak_hostname: KEYCLOAK_HOSTNAME
+  grafana_domain_name: GRAFANA_DOMAIN_NAME
+  ssl_email: SSL_EMAIL
+  ssl_staging: SSL_STAGING
+  redpanda_external_port: REDPANDA_EXTERNAL_PORT

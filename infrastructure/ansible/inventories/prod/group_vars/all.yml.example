@@ -1,0 +1,50 @@
+---
+# ============================================================================
+# Production Environment - Non-Secret Variables
+# ============================================================================
+# Copy this file to all.yml and customize for your production environment
+#
+# Usage:
+#   cp all.yml.example all.yml
+#   nano all.yml
+#
+# ============================================================================
+
+# Deployment configuration
+deployment_type: prod
+
+# Domain configuration
+api_domain_name: api.yourdomain.com
+keycloak_domain_name: auth.yourdomain.com
+keycloak_hostname: auth.yourdomain.com
+grafana_domain_name: grafana.yourdomain.com
+
+# SSL configuration
+ssl_email: admin@yourdomain.com
+ssl_staging: false
+
+# Application paths
+app_home: /opt/openmeal
+app_user: openmeal
+app_group: openmeal
+
+# Backup configuration
+backup_enabled: true
+backup_s3_bucket: openmeal-backups-prod
+backup_s3_region: us-east-1
+backup_s3_endpoint: https://s3.amazonaws.com
+backup_retention_days: 7
+backup_restic_keep_daily: 7
+backup_restic_keep_weekly: 2
+backup_restic_keep_monthly: 1
+
+# Backup schedule (cron format)
+backup_postgres_hour: "2"
+backup_postgres_minute: "0"
+backup_mongo_hour: "3"
+backup_mongo_minute: "0"
+backup_cleanup_hour: "4"
+backup_cleanup_minute: "0"
+
+# Optional: Healthcheck URL for backup monitoring (e.g., healthchecks.io)
+backup_healthcheck_url: ""

@@ -1,0 +1,40 @@
+---
+# ============================================================================
+# Backup Role - Default Variables
+# ============================================================================
+# These are fallback defaults. Override in inventory group_vars/all.yml
+# ============================================================================
+
+backup_enabled: false
+backup_retention_days: 7
+
+# Cron schedule (separate fields for better control)
+backup_postgres_hour: "2"
+backup_postgres_minute: "0"
+backup_mongo_hour: "3"
+backup_mongo_minute: "0"
+backup_cleanup_hour: "4"
+backup_cleanup_minute: "0"
+
+backup_app_home: "{{ app_home | default('/opt/openmeal') }}"
+backup_app_user: "{{ app_user | default('openmeal') }}"
+
+# S3-compatible storage configuration
+# Supports: AWS S3, MinIO, DigitalOcean Spaces, Backblaze B2, etc.
+backup_s3_bucket: "openmeal-backups"
+backup_s3_region: "us-east-1"
+backup_s3_endpoint: "https://s3.amazonaws.com"
+
+# Restic repository URL
+# For AWS S3: s3:s3.amazonaws.com/bucket-name/path
+# For MinIO: s3:https://minio.example.com/bucket-name/path
+# For other S3-compatible: s3:https://endpoint/bucket-name/path
+backup_restic_repository: "s3:{{ backup_s3_endpoint | regex_replace('^https?://', '') }}/{{ backup_s3_bucket }}/{{ deployment_type }}"
+
+# Restic retention policy
+backup_restic_keep_daily: 7
+backup_restic_keep_weekly: 4
+backup_restic_keep_monthly: 6
+
+# Healthcheck URL (optional, for monitoring services like healthchecks.io)
+backup_healthcheck_url: ""

@@ -1,0 +1,91 @@
+---
+# ============================================================================
+# Start Services Task
+# ============================================================================
+# Delegates service management to Makefile
+# Ansible does NOT manage Docker Compose directly
+# ============================================================================
+
+- name: Pull latest images (if not building)
+  ansible.builtin.command:
+    cmd: make pull
+    chdir: "{{ app_home }}"
+  become: true
+  become_user: "{{ app_user }}"
+  environment:
+    PATH: "/usr/local/bin:/usr/bin:/bin"
+  when: not build_images
+  register: pull_result
+  changed_when: "'Pulling' in pull_result.stdout"
+  failed_when: false
+
+- name: Build custom images (if enabled)
+  ansible.builtin.command:
+    cmd: make build
+    chdir: "{{ app_home }}"
+  become: true
+  become_user: "{{ app_user }}"
+  environment:
+    PATH: "/usr/local/bin:/usr/bin:/bin"
+  when: build_images
+  register: build_result
+  changed_when: "'Building' in build_result.stdout"
+  failed_when: false
+
+- name: Start services using Makefile (delegates to make up)
+  ansible.builtin.command:
+    cmd: "make up"
+    chdir: "{{ app_home }}"
+  become: true
+  become_user: "{{ app_user }}"
+  environment:
+    PATH: "/usr/local/bin:/usr/bin:/bin"
+  register: services_start
+  changed_when: true
+  notify: Restart database containers
+
+- name: Display service start output
+  ansible.builtin.debug:
+    var: services_start.stdout_lines
+
+- name: Display restart output
+  ansible.builtin.debug:
+    var: services_restart.stdout_lines
+  when: services_restart is defined and services_restart.stdout_lines is defined
+
+- name: Wait for services to initialize
+  ansible.builtin.pause:
+    seconds: 15
+    prompt: "Waiting for services to start..."
+
+- name: Check service health
+  ansible.builtin.command:
+    cmd: make ps
+    chdir: "{{ app_home }}"
+  become: true
+  become_user: "{{ app_user }}"
+  environment:
+    PATH: "/usr/local/bin:/usr/bin:/bin"
+  register: service_status
+  changed_when: false
+
+- name: Display running services
+  ansible.builtin.debug:
+    msg: "{{ service_status.stdout_lines }}"
+
+- name: Verify critical services are running
+  ansible.builtin.shell: |
+    set -o pipefail
+    docker ps --format '{{ '{{' }}.Names{{ '}}' }}' | grep -E '{{ container_prefix }}-postgres|{{ container_prefix }}-nginx'
+  args:
+    executable: /bin/bash
+  register: critical_services
+  changed_when: false
+  failed_when: critical_services.rc != 0
+
+- name: Display services summary
+  ansible.builtin.debug:
+    msg:
+      - "✓ Services started successfully"
+      - "Deployment type: {{ deployment_type }}"
+      - "Running containers: {{ critical_services.stdout_lines | length }}"

@@ -1,0 +1,51 @@
+#!/bin/bash
+# ============================================================================
+# PostgreSQL Backup Script with Restic
+# ============================================================================
+set -euo pipefail
+
+# Source restic environment
+source {{ backup_app_home }}/.restic/env
+
+BACKUP_DIR="{{ backup_app_home }}/backups"
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+DUMP_FILE="${BACKUP_DIR}/postgres_${TIMESTAMP}.sql"
+
+echo "$(date): Starting PostgreSQL backup..."
+
+# Create dump using Makefile command (outputs to stdout, we capture it)
+cd {{ backup_app_home }}
+make backup-postgres > /dev/null 2>&1 || {
+    echo "$(date): ERROR - PostgreSQL dump failed"
+    exit 1
+}
+
+# Find the latest dump file
+LATEST_DUMP=$(ls -t ${BACKUP_DIR}/postgres_*.sql | head -1)
+
+if [ ! -f "$LATEST_DUMP" ]; then
+    echo "$(date): ERROR - Dump file not found"
+    exit 1
+fi
+
+echo "$(date): Backing up to Restic: $LATEST_DUMP"
+
+# Backup to restic with encryption
+restic backup "$LATEST_DUMP" \
+    --tag postgres \
+    --tag {{ deployment_type }} \
+    --host {{ inventory_hostname }}
+
+if [ $? -eq 0 ]; then
+    echo "$(date): ✓ PostgreSQL backup completed successfully"
+    # Remove local dump after successful upload to S3
+    rm -f "$LATEST_DUMP"
+    echo "$(date): Local dump removed (stored in S3)"
+{% if backup_healthcheck_url %}
+    # Ping healthcheck URL if configured
+    curl -fsS --retry 3 "{{ backup_healthcheck_url }}/postgres" > /dev/null || true
+{% endif %}
+else
+    echo "$(date): ERROR - Restic backup failed"
+    exit 1
+fi

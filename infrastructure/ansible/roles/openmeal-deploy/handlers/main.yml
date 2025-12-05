@@ -1,0 +1,18 @@
+---
+# ============================================================================
+# OpenMeal Deploy Role - Handlers
+# ============================================================================
+
+- name: Mark services for restart
+  ansible.builtin.set_fact:
+    services_need_restart: true
+
+- name: Restart database containers
+  ansible.builtin.command:
+    cmd: "make restart"
+    chdir: "{{ app_home }}"
+  become: true
+  become_user: "{{ app_user }}"
+  environment:
+    PATH: "/usr/local/bin:/usr/bin:/bin"
+  changed_when: true

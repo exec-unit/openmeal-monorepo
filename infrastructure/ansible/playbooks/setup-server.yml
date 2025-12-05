@@ -1,0 +1,37 @@
+---
+# ============================================================================
+# OpenMeal - Server Setup Only Playbook
+# ============================================================================
+# Prepares server without deploying the application
+#
+# Usage:
+#   ansible-playbook -i inventories/stage/hosts.yml playbooks/setup-server.yml
+#
+# ============================================================================
+
+- name: Setup Server for OpenMeal
+  hosts: all
+  become: yes
+
+  vars_files:
+    - "{{ inventory_dir }}/group_vars/all.yml"
+
+  pre_tasks:
+    - name: Display setup information
+      ansible.builtin.debug:
+        msg:
+          - "OpenMeal Server Setup"
+          - "Target: {{ inventory_hostname }}"
+          - "IP: {{ ansible_host }}"
+
+  roles:
+    - role: common
+    - role: docker
+    - role: security
+
+  post_tasks:
+    - name: Display setup summary
+      ansible.builtin.debug:
+        msg:
+          - "Server Setup Completed!"
+          - "Ready for application deployment"

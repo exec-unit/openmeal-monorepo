@@ -1,0 +1,27 @@
+---
+# ============================================================================
+# OpenMeal Stage Environment - Ansible Inventory
+# ============================================================================
+# Copy this file to hosts.yml and configure for your stage server
+#
+# Usage:
+#   cp hosts.yml.example hosts.yml
+#   nano hosts.yml
+#
+# ============================================================================
+
+all:
+  children:
+    openmeal_stage:
+      hosts:
+        stage-server:
+          ansible_host: 192.168.1.100
+          ansible_user: admin
+          ansible_port: 22
+          ansible_ssh_private_key_file: ~/.ssh/id_rsa
+          deployment_type: stage
+          ansible_python_interpreter: /usr/bin/python3
+
+      vars:
+        ansible_become: yes
+        ansible_become_method: sudo

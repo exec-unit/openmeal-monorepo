@@ -1,0 +1,60 @@
+---
+# ============================================================================
+# Shared-Dev Environment - Non-Secret Variables
+# ============================================================================
+# Copy this file to all.yml and customize for your shared-dev environment
+#
+# Usage:
+#   cp all.yml.example all.yml
+#   nano all.yml
+#
+# ============================================================================
+
+# Deployment configuration
+deployment_type: shared-dev
+
+# Domain configuration
+api_domain_name: api-dev.yourdomain.com
+keycloak_domain_name: auth-dev.yourdomain.com
+keycloak_hostname: auth-dev.yourdomain.com
+grafana_domain_name: ""
+
+# Redpanda external access (for remote development)
+redpanda_external_port: "19092"
+
+# Security configuration
+security_ufw_allowed_ports:
+  - 22
+  - 80
+  - 443
+  - 19092
+
+# SSL configuration
+ssl_email: admin@yourdomain.com
+ssl_staging: true
+
+# Application paths
+app_home: /opt/openmeal
+app_user: openmeal
+app_group: openmeal
+
+# Backup configuration
+backup_enabled: false
+backup_s3_bucket: openmeal-backups-dev
+backup_s3_region: us-east-1
+backup_s3_endpoint: https://s3.amazonaws.com
+backup_retention_days: 7
+backup_restic_keep_daily: 7
+backup_restic_keep_weekly: 2
+backup_restic_keep_monthly: 1
+
+# Backup schedule (cron format)
+backup_postgres_hour: "2"
+backup_postgres_minute: "0"
+backup_mongo_hour: "3"
+backup_mongo_minute: "0"
+backup_cleanup_hour: "4"
+backup_cleanup_minute: "0"
+
+# Optional: Healthcheck URL for backup monitoring (e.g., healthchecks.io)
+backup_healthcheck_url: ""

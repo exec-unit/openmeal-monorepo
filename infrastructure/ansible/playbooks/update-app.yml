@@ -1,0 +1,96 @@
+---
+# ============================================================================
+# OpenMeal - Application Update Only Playbook
+# ============================================================================
+# Updates application without touching server configuration
+# Uses deploy role with tags: sync, config, services (skips SSL setup)
+#
+# Usage:
+#   ansible-playbook -i inventories/stage/hosts.yml playbooks/update-app.yml --ask-vault-pass
+#
+# ============================================================================
+
+- name: Update OpenMeal Application
+  hosts: all
+  become: yes
+
+  vars_files:
+    - "{{ inventory_dir }}/group_vars/all.yml"
+    - "{{ inventory_dir }}/group_vars/vault.yml"
+
+  pre_tasks:
+    - name: Display update information
+      ansible.builtin.debug:
+        msg:
+          - "OpenMeal Application Update"
+          - "Environment: {{ deployment_type }}"
+
+    - name: Check if SSL certificates exist
+      ansible.builtin.shell:
+        cmd: docker volume inspect openmeal-backend_certbot_etc --format '{{ '{{' }} .Mountpoint {{ '}}' }}'
+      register: certbot_volume_path
+      changed_when: false
+      failed_when: false
+      when: deployment_type in ['shared-dev', 'stage', 'prod']
+
+    - name: Check certificate directory
+      ansible.builtin.stat:
+        path: "{{ certbot_volume_path.stdout }}/live/{{ api_domain_name }}"
+      register: ssl_cert_check
+      when:
+        - deployment_type in ['shared-dev', 'stage', 'prod']
+        - certbot_volume_path.rc == 0
+
+    - name: Set nginx config based on SSL certificate presence
+      ansible.builtin.set_fact:
+        nginx_config_template: "{{ 'default.conf.template' if (ssl_cert_check.stat.exists | default(false)) else 'default-http-only.conf.template' }}"
+      when: deployment_type in ['shared-dev', 'stage', 'prod']
+
+    - name: Display SSL status
+      ansible.builtin.debug:
+        msg: >
+          {{ '✓ SSL certificates found - using HTTPS config' if (ssl_cert_check.stat.exists | default(false))
+          else '⚠ No SSL certificates - using HTTP-only config' }}
+      when: deployment_type in ['shared-dev', 'stage', 'prod']
+
+  tasks:
+    - name: Stop running services
+      ansible.builtin.command:
+        cmd: make down
+        chdir: "{{ app_home }}"
+      become_user: "{{ app_user }}"
+      register: stop_result
+      changed_when: true
+      failed_when: false
+
+    - name: Deploy with sync, config, and services
+      ansible.builtin.include_role:
+        name: openmeal-deploy
+        apply:
+          tags:
+            - sync
+            - config
+            - services
+      vars:
+        skip_ssl_setup: true
+        nginx_template_override: "{{ nginx_config_template | default('default.conf.template') }}"
+
+  post_tasks:
+    - name: Display service status
+      ansible.builtin.command: make ps
+      args:
+        chdir: "{{ app_home }}"
+      become_user: "{{ app_user }}"
+      register: service_status
+      changed_when: false
+
+    - name: Show running services
+      ansible.builtin.debug:
+        msg: "{{ service_status.stdout_lines }}"
+
+    - name: Display update summary
+      ansible.builtin.debug:
+        msg:
+          - "Application Updated!"
+          - "Services restarted"
+          - "SSL config: {{ nginx_config_template | default('default') }}"
