@@ -19,18 +19,23 @@
 ##################################################################
 # Global rules
 ##################################################################
-.env
+.env.infra
 microservices.local
 
 .cache/
 __pycache__/
 *.pyc
 
-##################################################################
-# Docker / Docker Compose
-##################################################################
-docker-compose.override.yml
-.docker/
+# Generated local development compose
+compose/docker-compose.local.yml
+
+# Service-specific environment files
+services/**/.env
+
+# Generated service env files on servers
+.env.*
+!.env.example
+!.env.infra.example
 
 ##################################################################
 # IDE / Editor
@@ -54,3 +59,9 @@ logs/
 tmp/
 temp/
 *.tmp
+
+##################################################################
+Spring Boot / Maven
+##################################################################
+**/target
+**/build
