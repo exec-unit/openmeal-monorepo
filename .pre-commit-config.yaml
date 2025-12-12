@@ -1,0 +1,111 @@
+repos:
+  - repo: local
+    hooks:
+      - id: prepare-stage-snapshot
+        name: "[Internal] Save pre-modification file state"
+        language: system
+        entry: bash -c 'git diff --cached --name-only --diff-filter=ACM > .git/pre-commit-staged-files'
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: ^.*\.(md|txt)$
+        stages: [pre-commit]
+      - id: end-of-file-fixer
+        stages: [pre-commit]
+      - id: check-yaml
+        args: [--unsafe]
+        stages: [pre-commit]
+      - id: check-added-large-files
+        args: [--maxkb=1000]
+        stages: [pre-commit]
+      - id: check-merge-conflict
+        stages: [pre-commit]
+      - id: check-case-conflict
+        stages: [pre-commit]
+      - id: mixed-line-ending
+        stages: [pre-commit]
+
+  - repo: local
+    hooks:
+      - id: ansible-lint
+        name: ansible-lint
+        language: system
+        files: ^infrastructure/ansible/roles/
+        pass_filenames: true
+        entry: ansible-lint
+        stages: [pre-commit]
+
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v4.3.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
+
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v4.0.0-alpha.8
+    hooks:
+      - id: prettier
+        files: \.(json|yaml|yml)$
+        exclude: ^(\.github/workflows/|infrastructure/ansible/)
+        stages: [pre-commit]
+
+  - repo: local
+    hooks:
+      - id: maven-wrapper-check
+        name: Check Maven wrapper exists
+        language: system
+        entry: |
+          bash -c '
+            if [ ! -f "./mvnw" ]; then
+              echo "Error: Maven wrapper not found. Run: mvn wrapper:wrapper"
+              exit 1
+            fi
+          '
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
+      - id: java-format-apply
+        name: Apply Java formatting
+        language: system
+        files: \.(java|xml)$
+        pass_filenames: false
+        entry: ./mvnw -q spotless:apply
+        stages: [pre-commit]
+
+      - id: check-for-modifications
+        name: Report files modified by hooks
+        language: system
+        entry: |
+          bash -c '
+            set -e
+            SNAPSHOT_FILE=".git/pre-commit-staged-files"
+            if [ ! -f "$SNAPSHOT_FILE" ] || [ ! -s "$SNAPSHOT_FILE" ]; then
+              rm -f "$SNAPSHOT_FILE"
+              exit 0
+            fi
+
+            STAGED_FILES=$(cat "$SNAPSHOT_FILE")
+            MODIFIED_FILES=$(git diff --name-only --diff-filter=M -- $STAGED_FILES 2>/dev/null || true)
+            rm -f "$SNAPSHOT_FILE"
+
+            if [ -n "$MODIFIED_FILES" ]; then
+              echo -e "\n\e[1;33mATTENTION: The following files were modified by hooks:\e[0m"
+              for file in $MODIFIED_FILES; do
+                echo -e "  - \e[36m$file\e[0m"
+              done
+
+              FILES_ON_LINE=$(echo "$MODIFIED_FILES" | tr "\n" " ")
+              echo -e "\n\e[1;33mPlease review the changes and re-stage them with the command:\e[0m"
+              echo -e "  \e[1;32mgit add $FILES_ON_LINE\e[0m\n"
+              exit 1
+            fi
+          '
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
