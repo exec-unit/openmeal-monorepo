@@ -69,20 +69,8 @@
   // Port forwarding for microservices architecture
   // 8080-8089: Service ports | 5005: Java debug | 9092: Kafka | 5432: PostgreSQL
   "forwardPorts": [
-    8080,
-    5005,
-    8081,
-    8082,
-    8083,
-    8084,
-    8085,
-    8086,
-    8087,
-    8088,
-    8089,
-    9001,
-    9092,
-    5432
+    8080, 5005, 8081, 8082, 8083, 8084, 8085, 8086, 8087, 8088, 8089, 9001,
+    9092, 5432
   ],
   // Port attributes for better development experience
   "portsAttributes": {
