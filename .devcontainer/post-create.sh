@@ -69,14 +69,14 @@ echo ""
 echo "[5/5] Installing Ansible and testing tools via pipx..."
 if [ -f "${WORKSPACE_FOLDER}/infrastructure/ansible/requirements-pip.txt" ]; then
   cd "${WORKSPACE_FOLDER}"
-  
+
   # Install pipx if not present
   if ! command -v pipx &> /dev/null; then
     echo "Installing pipx..."
     sudo apt install pipx
     pipx ensurepath
   fi
-  
+
   # Ensure PATH includes pipx binaries for current session and future shells
   export PIPX_HOME="/home/devuser/.local/share/pipx"
   export PIPX_BIN_DIR="/home/devuser/.local/bin"
@@ -86,14 +86,14 @@ if [ -f "${WORKSPACE_FOLDER}/infrastructure/ansible/requirements-pip.txt" ]; the
   echo 'export PIPX_BIN_DIR="$HOME/.local/bin"' >> /home/devuser/.bashrc
   echo 'export PATH="$PIPX_BIN_DIR:$PATH"' >> /home/devuser/.bashrc
   mkdir -p "$PIPX_BIN_DIR"
-  
+
   # Remove any existing ansible installations to avoid conflicts
   pipx uninstall-all || true
-  
+
   # Install Ansible via pipx (isolated environment)
   echo "Installing Ansible 13.0.0 via pipx..."
   pipx install ansible==13.0.0
-  
+
   # Inject additional tools into ansible environment
   echo "Injecting Molecule and testing tools into Ansible environment..."
   pipx inject ansible molecule==25.11.1
@@ -103,14 +103,14 @@ if [ -f "${WORKSPACE_FOLDER}/infrastructure/ansible/requirements-pip.txt" ]; the
   pipx inject ansible docker==7.1.0
   pipx inject ansible jmespath==1.0.1
   pipx inject ansible netaddr==1.3.0
-  
+
   # Create symlinks for all Ansible tools (pipx doesn't do this automatically for injected packages)
   echo "Creating symlinks for Ansible toolchain..."
   ANSIBLE_VENV_BIN="$PIPX_HOME/venvs/ansible/bin"
   for tool in ansible ansible-playbook ansible-galaxy ansible-vault ansible-config ansible-inventory ansible-lint molecule yamllint; do
     ln -sf "$ANSIBLE_VENV_BIN/$tool" "$PIPX_BIN_DIR/$tool"
   done
-  
+
   # Verify installation
   echo "Verifying Ansible toolchain..."
   $HOME/.local/bin/ansible --version
@@ -118,7 +118,7 @@ if [ -f "${WORKSPACE_FOLDER}/infrastructure/ansible/requirements-pip.txt" ]; the
   $HOME/.local/bin/ansible-galaxy --version
   $HOME/.local/bin/molecule --version
   $HOME/.local/bin/ansible-lint --version
-  
+
   # Install Ansible Galaxy collections
   if [ -f "${WORKSPACE_FOLDER}/infrastructure/ansible/requirements.yml" ]; then
     echo "Installing Ansible Galaxy collections..."
@@ -128,7 +128,7 @@ if [ -f "${WORKSPACE_FOLDER}/infrastructure/ansible/requirements-pip.txt" ]; the
       echo "You can manually install later with: ansible-galaxy collection install -r infrastructure/ansible/requirements.yml"
     }
   fi
-  
+
   echo "✓ Ansible toolchain installed successfully"
 else
   echo "No requirements-pip.txt found, skipping Ansible installation..."
@@ -148,4 +148,3 @@ echo "  - java -version"
 echo "  - mvn -version"
 echo "  - docker --version"
 echo ""
-
