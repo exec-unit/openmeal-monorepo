@@ -20,8 +20,8 @@ endif
 COMPOSE_PROJECT_NAME := openmeal-backend
 
 # Configuration files
-ENV_FILE := .env
-ENV_EXAMPLE := .env.example
+ENV_FILE := .env.infra
+ENV_EXAMPLE := .env.infra.example
 MICROSERVICES_LOCAL := microservices.local
 MICROSERVICES_LOCAL_EXAMPLE := microservices.local.example
 POSTGRES_USERS_CONF := config/postgres/init-users.conf
@@ -47,13 +47,13 @@ else
     CAT_CMD := cat
 endif
 
-# Export all variables from .env file if it exists
+# Export all variables from .env.infra file if it exists
 ifneq (,$(wildcard $(ENV_FILE)))
     include $(ENV_FILE)
     export
 endif
 
-# Docker Compose command with conditional .env loading
+# Docker Compose command with conditional .env.infra loading
 ifeq ($(shell test -f $(ENV_FILE) && echo exists),exists)
     COMPOSE_BASE_CMD := ENV_FILE=$(shell pwd)/$(ENV_FILE) docker compose --env-file $(ENV_FILE)
 else
@@ -66,7 +66,7 @@ endif
 
 .PHONY: check-env check-microservices-config init init-env init-microservices init-db-users
 
-## check-env: Check for .env file existence
+## check-env: Check for .env.infra file existence
 check-env:
 	@if [ ! -f "$(ENV_FILE)" ]; then \
 		echo "$(RED)✗ File $(ENV_FILE) not found!$(RESET)"; \
@@ -84,7 +84,7 @@ check-microservices-config:
 	fi
 	@echo "$(GREEN)✓ File $(MICROSERVICES_LOCAL) found$(RESET)"
 
-## init: Initialize all project configs (.env, microservices, DB users)
+## init: Initialize all project configs (.env.infra, microservices, DB users)
 init:
 	@echo "$(CYAN)╔════════════════════════════════════════════════════════════════╗$(RESET)"
 	@echo "$(CYAN)║              Project Initialization                            ║$(RESET)"
@@ -101,7 +101,7 @@ init:
 	@echo "$(GREEN)✓ Project initialization complete!$(RESET)"
 	@echo "$(YELLOW)→ Edit generated files for your needs$(RESET)"
 
-## init-env: Initialize .env file from example
+## init-env: Initialize .env.infra file from example
 init-env:
 	@if [ -f "$(ENV_FILE)" ]; then \
 		echo "$(YELLOW)⚠ File $(ENV_FILE) already exists$(RESET)"; \
