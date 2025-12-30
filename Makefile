@@ -18,6 +18,7 @@ include makefiles/docker.mk
 include makefiles/services.mk
 include makefiles/ssl.mk
 include makefiles/ansible.mk
+include makefiles/local-dev.mk
 
 .PHONY: help
 
@@ -27,13 +28,14 @@ help:
 	@echo "$(CYAN)║         OpenMeal Backend - Control Panel                       ║$(RESET)"
 	@echo "$(CYAN)╚════════════════════════════════════════════════════════════════╝$(RESET)"
 	@echo ""
-	@echo "$(GREEN)Core Commands (reads ENVIRONMENT from .env):$(RESET)"
+	@echo "$(GREEN)Core Commands (reads ENVIRONMENT variable from .env.infra):$(RESET)"
 	@echo "  $(YELLOW)make up$(RESET)              - Start environment"
 	@echo "  $(YELLOW)make down$(RESET)            - Stop and remove containers"
 	@echo "  $(YELLOW)make restart$(RESET)         - Restart environment"
+	@echo "  $(YELLOW)make restart-db$(RESET)      - Restart database containers (apply new users)"
 	@echo ""
 	@echo "$(GREEN)Environment Configuration:$(RESET)"
-	@echo "  Set ENVIRONMENT in .env to one of:"
+	@echo "  Set ENVIRONMENT in .env.infra to one of:"
 	@echo "    $(CYAN)local-dev$(RESET)   - Local dev (infra only, microservices via IDE)"
 	@echo "    $(CYAN)shared-dev$(RESET)  - Shared dev infrastructure (keycloak, redpanda)"
 	@echo "    $(CYAN)stage$(RESET)       - Full staging environment"
@@ -79,8 +81,8 @@ help:
 	@echo "  $(YELLOW)make prepare-db-configs$(RESET) - Prepare database configs for current environment"
 	@echo ""
 	@echo "$(GREEN)Quick Start:$(RESET)"
-	@echo "  $(YELLOW)make init$(RESET)            - Initialize all configs (.env, microservices, DB users)"
-	@echo "  $(YELLOW)make init-env$(RESET)        - Initialize .env file only"
+	@echo "  $(YELLOW)make init$(RESET)            - Initialize all configs (.env.infra, microservices, DB users)"
+	@echo "  $(YELLOW)make init-env$(RESET)        - Initialize .env.infra file only"
 	@echo "  $(YELLOW)make init-microservices$(RESET) - Initialize microservices config only"
 	@echo "  $(YELLOW)make init-db-users$(RESET)   - Initialize database user configs only"
 	@echo ""

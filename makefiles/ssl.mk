@@ -32,7 +32,7 @@ ssl-cert-init:
 		--no-eff-email \
 		--keep-until-expiring \
 		--non-interactive \
-		$$(if [ "$${SSL_STAGING}" = "true" ]; then echo "--staging"; fi) \
+		$$(if [ "$${SSL_STAGING}" = "True" ]; then echo "--staging"; fi) \
 		-d $${API_DOMAIN_NAME} 2>&1 | grep -E "(Successfully received|Saving debug log|error|Error|failed|Failed)" || true
 	@docker run --rm --name certbot-temp \
 		-v $${COMPOSE_PROJECT_NAME:-openmeal-backend}_certbot_etc:/etc/letsencrypt \
@@ -47,7 +47,7 @@ ssl-cert-init:
 		--no-eff-email \
 		--keep-until-expiring \
 		--non-interactive \
-		$$(if [ "$${SSL_STAGING}" = "true" ]; then echo "--staging"; fi) \
+		$$(if [ "$${SSL_STAGING}" = "True" ]; then echo "--staging"; fi) \
 		-d $${KEYCLOAK_DOMAIN_NAME} 2>&1 | grep -E "(Successfully received|Saving debug log|error|Error|failed|Failed)" || true
 	@if [ -n "$${GRAFANA_DOMAIN_NAME}" ] && [ "$${GRAFANA_DOMAIN_NAME}" != "localhost" ] && [ "$${GRAFANA_DOMAIN_NAME}" != "" ]; then \
 		docker run --rm --name certbot-temp \
@@ -63,15 +63,15 @@ ssl-cert-init:
 			--no-eff-email \
 			--keep-until-expiring \
 			--non-interactive \
-			$$(if [ "$${SSL_STAGING}" = "true" ]; then echo "--staging"; fi) \
+			$$(if [ "$${SSL_STAGING}" = "True" ]; then echo "--staging"; fi) \
 			-d $${GRAFANA_DOMAIN_NAME} 2>&1 | grep -E "(Successfully received|Saving debug log|error|Error|failed|Failed)" || true; \
 	fi
 	@echo "$(GREEN)✓ SSL certificates obtained$(RESET)"
-	@if [ -f .env ]; then \
-		sed -i 's/^NGINX_CONFIG_TEMPLATE=.*/NGINX_CONFIG_TEMPLATE=default.conf.template/' .env || \
-		echo "NGINX_CONFIG_TEMPLATE=default.conf.template" >> .env; \
+	@if [ -f .env.infra ]; then \
+		sed -i 's/^NGINX_CONFIG_TEMPLATE=.*/NGINX_CONFIG_TEMPLATE=default.conf.template/' .env.infra || \
+		echo "NGINX_CONFIG_TEMPLATE=default.conf.template" >> .env.infra; \
 	else \
-		echo "$(RED)✗ Error: .env file not found$(RESET)"; \
+		echo "$(RED)✗ Error: .env.infra file not found$(RESET)"; \
 		exit 1; \
 	fi
 	@docker restart $${CONTAINER_PREFIX:-openmeal}-nginx > /dev/null 2>&1
