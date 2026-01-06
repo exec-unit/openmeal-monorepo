@@ -86,17 +86,17 @@ fi
 # Check each container dynamically
 while IFS= read -r container; do
     [ -z "$container" ] && continue
-    
+
     total=$((total+1))
-    
+
     # Get container name without project prefix for display
     display_name=$(echo "$container" | sed 's/^[^-]*-//')
-    
+
     echo -n "Checking $display_name... "
-    
+
     # Check if container has healthcheck configured
     healthcheck_test=$(get_healthcheck_test "$container")
-    
+
     if [ "$healthcheck_test" = "null" ] || [ -z "$healthcheck_test" ]; then
         # No healthcheck configured - just verify it's running
         if docker ps --filter "name=$container" --filter "status=running" --format '{{.Names}}' | grep -q "$container"; then
@@ -109,7 +109,7 @@ while IFS= read -r container; do
     else
         # Healthcheck is configured - check its status
         health_status=$(check_container_health "$container")
-        
+
         case "$health_status" in
             "healthy")
                 echo -e "${GREEN}✓ Healthy${NC}"

@@ -74,28 +74,28 @@ warn() {
 # Function to renew certificates
 renew_certificates() {
     check_os_compatibility
-    
+
     log "Starting SSL certificate renewal check..."
-    
+
     cd "$PROJECT_DIR"
-    
+
     # Check if docker is available
     if ! command -v docker >/dev/null 2>&1; then
         error "Docker is not installed or not in PATH"
         exit 1
     fi
-    
+
     # Check if make is available
     if ! command -v make >/dev/null 2>&1; then
         error "Make is not installed or not in PATH"
         error "Please install make: sudo apt-get install make (Linux) or brew install make (macOS)"
         exit 1
     fi
-    
+
     # Run certbot renewal
     log "Running certbot renew..."
     make ssl-cert-renew >> /var/log/openmeal-ssl-renew.log 2>&1
-    
+
     if [ $? -eq 0 ]; then
         log "Certificate renewal completed successfully"
     else
@@ -107,23 +107,23 @@ renew_certificates() {
 # Install systemd timer
 install_systemd() {
     check_os_compatibility
-    
+
     # Check if systemd is available
     if ! command -v systemctl >/dev/null 2>&1; then
         error "systemd is not available on this system"
         error "Please use 'install-cron' instead or manually schedule renewals"
         exit 1
     fi
-    
+
     # Check if running with sufficient privileges
     if [ "$EUID" -ne 0 ] && ! sudo -n true 2>/dev/null; then
         error "This operation requires sudo privileges"
         error "Please run with sudo or ensure your user can use sudo without password"
         exit 1
     fi
-    
+
     log "Installing systemd timer for SSL renewal..."
-    
+
     # Create systemd service file
     cat > /tmp/${SCRIPT_NAME}.service <<EOF
 [Unit]
@@ -166,16 +166,16 @@ EOF
     # Install files
     sudo mv /tmp/${SCRIPT_NAME}.service /etc/systemd/system/
     sudo mv /tmp/${SCRIPT_NAME}.timer /etc/systemd/system/
-    
+
     # Set permissions
     sudo chmod 644 /etc/systemd/system/${SCRIPT_NAME}.service
     sudo chmod 644 /etc/systemd/system/${SCRIPT_NAME}.timer
-    
+
     # Reload systemd and enable timer
     sudo systemctl daemon-reload
     sudo systemctl enable ${SCRIPT_NAME}.timer
     sudo systemctl start ${SCRIPT_NAME}.timer
-    
+
     log "Systemd timer installed and started"
     log "Check status with: sudo systemctl status ${SCRIPT_NAME}.timer"
     log "View logs with: sudo journalctl -u ${SCRIPT_NAME}.service"
@@ -184,7 +184,7 @@ EOF
 # Install cron job
 install_cron() {
     check_os_compatibility
-    
+
     # Check if cron is available
     if ! command -v crontab >/dev/null 2>&1; then
         error "cron is not available on this system"
@@ -196,23 +196,23 @@ install_cron() {
         fi
         exit 1
     fi
-    
+
     log "Installing cron job for SSL renewal..."
-    
+
     # Create cron job (runs twice daily at 3:00 AM and 3:00 PM)
     CRON_CMD="${PROJECT_DIR}/scripts/ssl-renew-cron.sh renew >> /var/log/openmeal-ssl-renew.log 2>&1"
-    
+
     # Check if cron job already exists
     if crontab -l 2>/dev/null | grep -q "ssl-renew-cron.sh"; then
         warn "Cron job already exists, removing old entry..."
         crontab -l 2>/dev/null | grep -v "ssl-renew-cron.sh" | crontab -
     fi
-    
+
     # Add new cron jobs
     (crontab -l 2>/dev/null; echo "# OpenMeal SSL Certificate Renewal - runs twice daily") | crontab -
     (crontab -l 2>/dev/null; echo "0 3 * * * $CRON_CMD") | crontab -
     (crontab -l 2>/dev/null; echo "0 15 * * * $CRON_CMD") | crontab -
-    
+
     log "Cron job installed successfully"
     log "Certificates will be checked twice daily at 3:00 AM and 3:00 PM"
     log "View logs at: /var/log/openmeal-ssl-renew.log"
@@ -224,15 +224,15 @@ uninstall_systemd() {
         error "systemd is not available on this system"
         exit 1
     fi
-    
+
     log "Uninstalling systemd timer..."
-    
+
     sudo systemctl stop ${SCRIPT_NAME}.timer 2>/dev/null || true
     sudo systemctl disable ${SCRIPT_NAME}.timer 2>/dev/null || true
     sudo rm -f /etc/systemd/system/${SCRIPT_NAME}.service
     sudo rm -f /etc/systemd/system/${SCRIPT_NAME}.timer
     sudo systemctl daemon-reload
-    
+
     log "Systemd timer uninstalled"
 }
 
@@ -242,11 +242,11 @@ uninstall_cron() {
         error "cron is not available on this system"
         exit 1
     fi
-    
+
     log "Uninstalling cron job..."
-    
+
     crontab -l 2>/dev/null | grep -v "ssl-renew-cron.sh" | grep -v "OpenMeal SSL Certificate Renewal" | crontab -
-    
+
     log "Cron job uninstalled"
 }
 

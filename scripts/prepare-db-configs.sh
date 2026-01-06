@@ -57,7 +57,7 @@ comment_all_except() {
 # PostgreSQL configuration - only manage keycloak user
 if [ -f "$POSTGRES_CONFIG" ]; then
     echo "Configuring PostgreSQL users..."
-    
+
     case "$ENVIRONMENT" in
         local-dev)
             # For local-dev: uncomment all except keycloak (uses shared-dev keycloak)
