@@ -12,7 +12,7 @@ volumes:
 networks:
   default:
     name: ${DOCKER_NETWORK_NAME:-openmeal_net}
-    external: ${DOCKER_NETWORK_EXTERNAL:-false}
+    external: true
 
 services:
   # Prometheus - Metrics collection and time-series database
@@ -24,7 +24,7 @@ services:
     networks:
       - default
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
     volumes:
       - ./config/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
@@ -54,7 +54,7 @@ services:
     networks:
       - default
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     volumes:
       - grafana_data:/var/lib/grafana
       - ./config/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
