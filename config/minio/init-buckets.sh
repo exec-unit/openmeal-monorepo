@@ -55,18 +55,18 @@ trim() {
 
 while IFS=: read -r username password_var buckets policy || [ -n "$username" ]; do
     [[ -z "$username" || "$username" =~ ^[[:space:]]*# ]] && continue
-    
+
     username=$(trim "$username")
     password_var=$(trim "$password_var")
     buckets=$(trim "$buckets")
     policy=$(trim "$policy")
-    
+
     [ -z "$username" ] || [ -z "$password_var" ] || [ -z "$buckets" ] || [ -z "$policy" ] && continue
-    
+
     password=$(resolve_env_var "$password_var")
-    
+
     echo "Processing: user=$username, buckets=$buckets, policy=$policy"
-    
+
     # Check if user exists (using pure bash)
     USER_EXISTS=false
     while IFS= read -r line; do
@@ -76,7 +76,7 @@ while IFS=: read -r username password_var buckets policy || [ -n "$username" ]; 
             break
         fi
     done < <(mc admin user list "$MC_ALIAS" 2>/dev/null || echo "")
-    
+
     if [ "$USER_EXISTS" = true ]; then
         echo "  ✓ User '$username' already exists"
     else
@@ -88,13 +88,13 @@ while IFS=: read -r username password_var buckets policy || [ -n "$username" ]; 
             echo "  ✗ Failed to create user '$username'"
         fi
     fi
-    
+
     # Process buckets
     IFS=',' read -ra BUCKET_ARRAY <<< "$buckets"
     for bucket in "${BUCKET_ARRAY[@]}"; do
         bucket=$(trim "$bucket")
         [ -z "$bucket" ] && continue
-        
+
         echo "  → Checking bucket '$bucket'..."
         if mc ls "$MC_ALIAS/$bucket" > /dev/null 2>&1; then
             echo "  ✓ Bucket '$bucket' already exists"
@@ -108,7 +108,7 @@ while IFS=: read -r username password_var buckets policy || [ -n "$username" ]; 
                 continue
             fi
         fi
-        
+
         # Set policy for user on bucket
         echo "  → Setting $policy policy for '$username' on '$bucket'..."
         if mc admin policy attach "$MC_ALIAS" "$policy" --user "$username" 2>&1; then
@@ -117,7 +117,7 @@ while IFS=: read -r username password_var buckets policy || [ -n "$username" ]; 
             echo "  ✗ Failed to attach policy"
         fi
     done
-    
+
 done < "$CONFIG_FILE"
 
 echo ""

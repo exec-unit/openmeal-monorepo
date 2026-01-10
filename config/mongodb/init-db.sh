@@ -40,24 +40,24 @@ echo "Reading configuration from: $CONFIG_FILE"
 while IFS=: read -r username password_var database roles || [ -n "$username" ]; do
     # Skip empty lines and comments
     [[ -z "$username" || "$username" =~ ^[[:space:]]*# ]] && continue
-    
+
     # Trim whitespace
     username=$(echo "$username" | xargs)
     password_var=$(echo "$password_var" | xargs)
     database=$(echo "$database" | xargs)
     roles=$(echo "$roles" | xargs)
-    
+
     # Skip if any field is empty
     if [ -z "$username" ] || [ -z "$password_var" ] || [ -z "$database" ] || [ -z "$roles" ]; then
         echo "WARNING: Skipping invalid line - missing fields"
         continue
     fi
-    
+
     # Resolve password from environment variable
     password=$(resolve_env_var "$password_var")
-    
+
     echo "Processing: user=$username, database=$database, roles=$roles"
-    
+
     # Convert comma-separated roles to MongoDB array format
     IFS=',' read -ra ROLE_ARRAY <<< "$roles"
     ROLES_JSON="["
@@ -69,7 +69,7 @@ while IFS=: read -r username password_var database roles || [ -n "$username" ]; 
         ROLES_JSON+="{role:\"$role\",db:\"$database\"}"
     done
     ROLES_JSON+="]"
-    
+
     # Create user in the specific database
     echo "  → Creating user '$username' in database '$database'..."
     mongosh --username "$MONGO_INITDB_ROOT_USERNAME" --password "$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin "$database" <<-EOJS
@@ -89,7 +89,7 @@ while IFS=: read -r username password_var database roles || [ -n "$username" ]; 
             }
         }
 EOJS
-    
+
 done < "$CONFIG_FILE"
 
 echo ""

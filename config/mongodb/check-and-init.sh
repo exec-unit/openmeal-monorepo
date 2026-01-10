@@ -52,16 +52,16 @@ NEW_USERS=0
 
 while IFS=: read -r username password_var database roles || [ -n "$username" ]; do
     [[ -z "$username" || "$username" =~ ^[[:space:]]*# ]] && continue
-    
+
     username=$(trim "$username")
     password_var=$(trim "$password_var")
     database=$(trim "$database")
     roles=$(trim "$roles")
-    
+
     [ -z "$username" ] || [ -z "$password_var" ] || [ -z "$database" ] || [ -z "$roles" ] && continue
-    
+
     password=$(resolve_env_var "$password_var")
-    
+
     # Convert roles to JSON array
     IFS=',' read -ra ROLE_ARRAY <<< "$roles"
     ROLES_JSON="["
@@ -71,7 +71,7 @@ while IFS=: read -r username password_var database roles || [ -n "$username" ]; 
         ROLES_JSON+="{role:\"$role\",db:\"$database\"}"
     done
     ROLES_JSON+="]"
-    
+
     # Try to create user
     mongosh --username "$MONGO_INITDB_ROOT_USERNAME" --password "$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin "$database" <<-EOJS > /dev/null 2>&1
         try {
@@ -87,12 +87,12 @@ while IFS=: read -r username password_var database roles || [ -n "$username" ]; 
             }
         }
 EOJS
-    
+
     if [ $? -eq 0 ]; then
         echo "Created new user: $username in database: $database"
         ((NEW_USERS++))
     fi
-    
+
 done < "$CONFIG_FILE"
 
 if [ $NEW_USERS -eq 0 ]; then
