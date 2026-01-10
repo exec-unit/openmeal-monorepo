@@ -56,23 +56,23 @@ declare -A PROCESSED_USERS
 while IFS=: read -r username password_var database || [ -n "$username" ]; do
     # Skip empty lines and comments
     [[ -z "$username" || "$username" =~ ^[[:space:]]*# ]] && continue
-    
+
     # Trim whitespace
     username=$(echo "$username" | xargs)
     password_var=$(echo "$password_var" | xargs)
     database=$(echo "$database" | xargs)
-    
+
     # Skip if any field is empty
     if [ -z "$username" ] || [ -z "$password_var" ] || [ -z "$database" ]; then
         echo "WARNING: Skipping invalid line - missing fields"
         continue
     fi
-    
+
     # Resolve password from environment variable or use literal
     password=$(resolve_env_var "$password_var")
-    
+
     echo "Processing: user=$username, database=$database"
-    
+
     # Create user if doesn't exist
     if user_exists "$username"; then
         echo "  ✓ User '$username' already exists, skipping creation"
@@ -83,7 +83,7 @@ while IFS=: read -r username password_var database || [ -n "$username" ]; do
 EOSQL
         echo "  ✓ User '$username' created"
     fi
-    
+
     # Create database if doesn't exist
     if db_exists "$database"; then
         echo "  ✓ Database '$database' already exists, skipping creation"
@@ -94,16 +94,16 @@ EOSQL
 EOSQL
         echo "  ✓ Database '$database' created"
     fi
-    
+
     # Grant privileges (safe to run multiple times)
     echo "  → Granting privileges..."
     psql -U "$POSTGRES_USER" <<-EOSQL
         GRANT ALL PRIVILEGES ON DATABASE "$database" TO "$username";
 EOSQL
     echo "  ✓ Privileges granted"
-    
+
     PROCESSED_USERS["$username"]="$database"
-    
+
 done < "$CONFIG_FILE"
 
 echo ""
