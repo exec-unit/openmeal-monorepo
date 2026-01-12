@@ -1,0 +1,27 @@
+redpanda:
+  data_directory: /var/lib/redpanda/data
+  seed_servers: []
+  rpc_server:
+    address: 0.0.0.0
+    port: 33145
+  advertised_rpc_api:
+    address: redpanda
+    port: 33145
+  kafka_api:
+    - address: 0.0.0.0
+      port: ${REDPANDA_INTERNAL_PORT}
+      name: internal
+      authentication_method: sasl
+  admin:
+    - address: 0.0.0.0
+      port: ${REDPANDA_ADMIN_PORT}
+  advertised_kafka_api:
+    - address: redpanda
+      port: ${REDPANDA_INTERNAL_PORT}
+      name: internal
+  developer_mode: true
+  auto_create_topics_enabled: true
+  admin_api_require_auth: false
+
+rpk:
+  enable_usage_stats: false
