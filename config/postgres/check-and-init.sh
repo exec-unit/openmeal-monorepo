@@ -58,15 +58,15 @@ NEW_DBS=0
 
 while IFS=: read -r username password_var database || [ -n "$username" ]; do
     [[ -z "$username" || "$username" =~ ^[[:space:]]*# ]] && continue
-    
+
     username=$(echo "$username" | xargs)
     password_var=$(echo "$password_var" | xargs)
     database=$(echo "$database" | xargs)
-    
+
     [ -z "$username" ] || [ -z "$password_var" ] || [ -z "$database" ] && continue
-    
+
     password=$(resolve_env_var "$password_var")
-    
+
     if ! user_exists "$username"; then
         echo "Creating new user: $username"
         psql -U "$POSTGRES_USER" <<-EOSQL
@@ -74,7 +74,7 @@ while IFS=: read -r username password_var database || [ -n "$username" ]; do
 EOSQL
         ((NEW_USERS++))
     fi
-    
+
     if ! db_exists "$database"; then
         echo "Creating new database: $database"
         psql -U "$POSTGRES_USER" <<-EOSQL
@@ -83,7 +83,7 @@ EOSQL
 EOSQL
         ((NEW_DBS++))
     fi
-    
+
 done < "$CONFIG_FILE"
 
 if [ $NEW_USERS -eq 0 ] && [ $NEW_DBS -eq 0 ]; then
