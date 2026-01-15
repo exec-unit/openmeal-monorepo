@@ -12,15 +12,13 @@ rules:
 
   indentation:
     spaces: 2
-    indent-sequences: yes
+    indent-sequences: true
 
   comments:
     min-spaces-from-content: 1
 
-  comments-indentation: disable
-
   truthy:
-    allowed-values: ["true", "false", "yes", "no"]
+    allowed-values: ["true", "false"]
 
   braces:
     max-spaces-inside: 1
