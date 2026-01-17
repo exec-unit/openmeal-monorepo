@@ -15,7 +15,7 @@
       ansible.builtin.package:
         name: ufw
         state: present
-      check_mode: yes
+      check_mode: true
       register: security_ufw_installed
       failed_when: security_ufw_installed.changed
 
@@ -36,7 +36,7 @@
       ansible.builtin.package:
         name: openssh-server
         state: present
-      check_mode: yes
+      check_mode: true
       register: security_ssh_installed
       failed_when: security_ssh_installed.changed
 
@@ -65,7 +65,7 @@
       ansible.builtin.package:
         name: fail2ban
         state: present
-      check_mode: yes
+      check_mode: true
       register: security_fail2ban_installed
       failed_when: security_fail2ban_installed.changed
 
@@ -73,7 +73,7 @@
       ansible.builtin.systemd:
         name: fail2ban
         state: started
-      check_mode: yes
+      check_mode: true
       register: security_fail2ban_service
       failed_when: security_fail2ban_service.changed
 
@@ -94,7 +94,7 @@
       ansible.builtin.package:
         name: unattended-upgrades
         state: present
-      check_mode: yes
+      check_mode: true
       register: security_unattended_installed
       failed_when: security_unattended_installed.changed
 
