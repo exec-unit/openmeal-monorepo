@@ -13,7 +13,7 @@
       - postgresql-client
       - cron
     state: present
-    update_cache: yes
+    update_cache: true
   retries: 3
   delay: 5
 
@@ -21,7 +21,7 @@
   ansible.builtin.service:
     name: cron
     state: started
-    enabled: yes
+    enabled: true
 
 - name: Ensure backups directory exists
   ansible.builtin.file:
@@ -115,6 +115,7 @@
     user: "{{ backup_app_user }}"
     job: "{{ backup_app_home }}/.restic/backup-postgres.sh >> {{ backup_app_home }}/backups/postgres-backup.log 2>&1"
     state: "{{ 'present' if backup_enabled else 'absent' }}"
+  when: backup_enabled
 
 - name: Setup MongoDB backup cron job
   ansible.builtin.cron:
@@ -124,6 +125,7 @@
     user: "{{ backup_app_user }}"
     job: "{{ backup_app_home }}/.restic/backup-mongo.sh >> {{ backup_app_home }}/backups/mongo-backup.log 2>&1"
     state: "{{ 'present' if backup_enabled else 'absent' }}"
+  when: backup_enabled
 
 - name: Setup backup cleanup cron job
   ansible.builtin.cron:
@@ -133,6 +135,7 @@
     user: "{{ backup_app_user }}"
     job: "{{ backup_app_home }}/.restic/backup-cleanup.sh >> {{ backup_app_home }}/backups/cleanup.log 2>&1"
     state: "{{ 'present' if backup_enabled else 'absent' }}"
+  when: backup_enabled
 
 - name: Display backup configuration summary
   ansible.builtin.debug:
@@ -143,3 +146,4 @@
       - "Cleanup: {{ backup_cleanup_hour }}:{{ backup_cleanup_minute }}"
       - "Repository: {{ backup_restic_repository }}"
       - "Retention: {{ backup_restic_keep_daily }}d/{{ backup_restic_keep_weekly }}w/{{ backup_restic_keep_monthly }}m"
+  when: backup_enabled
