@@ -20,7 +20,7 @@
           - htop
           - net-tools
         state: present
-      check_mode: yes
+      check_mode: true
       register: common_packages_check
       failed_when: common_packages_check.changed
 

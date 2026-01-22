@@ -30,7 +30,7 @@
       ansible.builtin.group:
         name: docker
         state: present
-      check_mode: yes
+      check_mode: true
       register: docker_group
       failed_when: docker_group.changed
 

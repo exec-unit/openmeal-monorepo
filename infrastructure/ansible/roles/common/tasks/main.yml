@@ -7,7 +7,7 @@
 
 - name: Update apt cache
   ansible.builtin.apt:
-    update_cache: yes
+    update_cache: true
     cache_valid_time: 3600
   retries: 3
   delay: 5
@@ -17,8 +17,8 @@
 - name: Upgrade all packages to latest version
   ansible.builtin.apt:
     upgrade: dist
-    autoremove: yes
-    autoclean: yes
+    autoremove: true
+    autoclean: true
   retries: 3
   delay: 5
   register: common_apt_upgrade
@@ -54,7 +54,7 @@
     group: "{{ common_app_group }}"
     home: "{{ common_app_home }}"
     shell: /bin/bash
-    create_home: yes
+    create_home: true
     state: present
 
 - name: Create application directory

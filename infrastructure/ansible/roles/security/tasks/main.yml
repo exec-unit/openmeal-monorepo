@@ -13,7 +13,7 @@
       - unattended-upgrades
       - apt-listchanges
     state: present
-    update_cache: yes
+    update_cache: true
 
 # ============================================================================
 # UFW Firewall Configuration
@@ -69,7 +69,7 @@
   ansible.builtin.systemd:
     name: ufw
     state: started
-    enabled: yes
+    enabled: true
   when: not mock_systemd | default(false)
 
 # ============================================================================
@@ -80,8 +80,8 @@
   ansible.builtin.copy:
     src: /etc/ssh/sshd_config
     dest: /etc/ssh/sshd_config.backup
-    remote_src: yes
-    force: no
+    remote_src: true
+    force: false
     mode: '0600'
 
 - name: Configure SSH - Disable root login
@@ -156,7 +156,7 @@
   ansible.builtin.systemd:
     name: fail2ban
     state: started
-    enabled: yes
+    enabled: true
   when:
     - not mock_systemd | default(false)
     - security_fail2ban_enabled

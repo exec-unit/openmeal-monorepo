@@ -27,12 +27,12 @@ common_base_packages:
   - vim
   - nano
   - htop
+  - cron
   - net-tools
   - ca-certificates
   - gnupg
   - lsb-release
   - apt-transport-https
-  - software-properties-common
   - python3
   - python3-pip
   - rsync
