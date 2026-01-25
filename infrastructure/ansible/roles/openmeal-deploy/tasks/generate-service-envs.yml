@@ -1,0 +1,135 @@
+---
+# ============================================================================
+# Generate Service Environment Files
+# ============================================================================
+# Hybrid approach: Combines consolidated and per-service secrets
+# - Consolidated (vault_services_env): Extracts SERVICE_PREFIX_* variables
+# - Per-service (vault_*_env): Direct service-specific secrets
+# - Per-service variables override consolidated ones
+# ============================================================================
+
+- name: Check available secret sources
+  ansible.builtin.set_fact:
+    has_consolidated_env: "{{ vault_services_env is defined and vault_services_env | length > 0 }}"
+    has_per_service_env: >-
+      {{
+        vars | dict2items
+        | selectattr('key', 'match', '^vault_[a-z_]+_env$')
+        | rejectattr('key', 'equalto', 'vault_services_env')
+        | list | length > 0
+      }}"
+
+- name: Display environment strategy
+  ansible.builtin.debug:
+    msg:
+      - "Secret sources available:"
+      - "  - Consolidated (vault_services_env): {{ has_consolidated_env }}"
+      - "  - Per-service (vault_*_env): {{ has_per_service_env }}"
+      - "Strategy: Hybrid (both sources merged, per-service takes priority)"
+
+# ============================================================================
+# Discover all services from docker-compose.yml
+# ============================================================================
+- name: Check if services section exists in docker-compose.yml
+  ansible.builtin.shell: |
+    grep -q '^services:' docker-compose.yml && echo "exists" || echo "missing"
+  args:
+    chdir: "{{ app_home }}"
+  register: services_section_check
+  changed_when: false
+
+- name: Discover services from docker-compose.yml
+  ansible.builtin.shell: |
+    set -o pipefail
+    if command -v yq >/dev/null 2>&1; then
+      yq eval '.services // {} | keys | .[]' docker-compose.yml | grep -v '^placeholder$' || true
+    else
+      grep -E '^\s+[a-z-]+:$' docker-compose.yml | sed 's/://g' | tr -d ' ' | grep -v '^placeholder$' || true
+    fi
+  args:
+    chdir: "{{ app_home }}"
+    executable: /bin/bash
+  register: discovered_services
+  changed_when: false
+  when: services_section_check.stdout == "exists"
+
+# ============================================================================
+# Get all per-service vault variables
+# ============================================================================
+- name: Get all per-service vault variables
+  ansible.builtin.set_fact:
+    per_service_vault_vars: >-
+      {{
+        vars | dict2items
+        | selectattr('key', 'match', '^vault_[a-z_]+_env$')
+        | rejectattr('key', 'equalto', 'vault_services_env')
+        | list
+      }}
+  when: services_section_check.stdout == "exists"
+
+- name: Skip service env generation (no services defined)
+  ansible.builtin.debug:
+    msg:
+      - "No services defined in docker-compose.yml"
+      - "Skipping .env.<service> generation"
+      - "Add services to docker-compose.yml to enable per-service environment files"
+  when: services_section_check.stdout != "exists" or (discovered_services.stdout_lines | default([]) | length == 0)
+
+# ============================================================================
+# Generate .env files for each service (hybrid approach)
+# ============================================================================
+- name: Generate .env files for each service (hybrid)
+  ansible.builtin.shell: |
+    set -o pipefail
+    SERVICE_NAME="{{ item }}"
+    SERVICE_PREFIX=$(echo "$SERVICE_NAME" | tr '[:lower:]' '[:upper:]' | tr '-' '_')
+    ENV_FILE=".env.${SERVICE_NAME}"
+
+    # Create empty file
+    > "$ENV_FILE"
+
+    # Step 1: Extract from consolidated vault_services_env (if available)
+    {% if has_consolidated_env %}
+    echo "{{ vault_services_env }}" | grep "^${SERVICE_PREFIX}_" | sed "s/^${SERVICE_PREFIX}_//" >> "$ENV_FILE"
+    {% endif %}
+
+    # Step 2: Append/override with per-service vault variable (if available)
+    {% raw %}
+    PER_SERVICE_VAR="vault_${SERVICE_PREFIX}_env"
+    PER_SERVICE_VAR_LOWER=$(echo "$PER_SERVICE_VAR" | tr '[:upper:]' '[:lower:]')
+    {% endraw %}
+
+    # Check if per-service variable exists and append it
+    {% for var in per_service_vault_vars %}
+    if [ "$PER_SERVICE_VAR_LOWER" = "{{ var.key }}" ]; then
+      echo "{{ var.value }}" >> "$ENV_FILE"
+    fi
+    {% endfor %}
+
+    # Set permissions
+    chmod 600 "$ENV_FILE"
+    chown {{ app_user }}:{{ app_group }} "$ENV_FILE"
+  args:
+    chdir: "{{ app_home }}"
+    executable: /bin/bash
+  loop: "{{ discovered_services.stdout_lines | default([]) }}"
+  loop_control:
+    label: "{{ item }}"
+  when:
+    - services_section_check.stdout == "exists"
+    - discovered_services.stdout_lines | default([]) | length > 0
+  no_log: true
+  changed_when: false
+
+- name: List generated service env files
+  ansible.builtin.find:
+    paths: "{{ app_home }}"
+    patterns: ".env.*"
+    file_type: file
+  register: service_env_files
+
+- name: Display generated service env files
+  ansible.builtin.debug:
+    msg:
+      - "✓ Generated {{ service_env_files.files | length }} service environment files"
+      - "{% for file in service_env_files.files %}  - {{ file.path | basename }}{% endfor %}"
