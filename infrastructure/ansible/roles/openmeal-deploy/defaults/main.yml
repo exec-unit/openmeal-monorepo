@@ -9,6 +9,7 @@ app_group: "openmeal"
 
 deployment_type: "stage"
 container_prefix: "openmeal"
+docker_network_name: "openmeal_net"
 
 api_domain_name: "localhost"
 keycloak_domain_name: "localhost"
@@ -36,7 +37,7 @@ sync_directories:
   - name: "compose"
     src: "compose"
     dest: "compose"
-    delete: yes
+    delete: true
     rsync_opts:
       - "--exclude=.git"
       - "--exclude=*.swp"
@@ -44,7 +45,7 @@ sync_directories:
   - name: "config"
     src: "config"
     dest: "config"
-    delete: yes
+    delete: true
     rsync_opts:
       - "--exclude=.git"
       - "--exclude=*.swp"
@@ -52,19 +53,19 @@ sync_directories:
   - name: "scripts"
     src: "scripts"
     dest: "scripts"
-    delete: yes
+    delete: true
     rsync_opts:
       - "--exclude=.git"
 
   - name: "infrastructure/keycloak"
     src: "infrastructure/keycloak"
     dest: "infrastructure/keycloak"
-    delete: yes
+    delete: true
 
   - name: "makefiles"
     src: "makefiles"
     dest: "makefiles"
-    delete: yes
+    delete: true
     rsync_opts:
       - "--exclude=.git"
 
@@ -78,6 +79,11 @@ sync_files:
   - name: "Makefile"
     src: "Makefile"
     dest: "Makefile"
+    mode: "0644"
+
+  - name: ".env.infra.example"
+    src: ".env.infra.example"
+    dest: ".env.infra.example"
     mode: "0644"
 
 # Directories to create on target
@@ -94,19 +100,18 @@ ensure_directories:
 # ============================================================================
 # Environment Variable Mapping
 # ============================================================================
-# Mapping of Ansible variables to .env variables
+# Mapping of Ansible variables to .env.infra variables
 # Supports both 1:1 and 1:many mappings
 # Add new mappings here when introducing deployment-specific overrides
 
 env_var_mapping:
   deployment_type: ENVIRONMENT
   container_prefix: CONTAINER_PREFIX
-  api_domain_name:
-    - API_DOMAIN_NAME
-    - REDPANDA_ADVERTISED_HOST
+  api_domain_name: API_DOMAIN_NAME
   keycloak_domain_name: KEYCLOAK_DOMAIN_NAME
   keycloak_hostname: KEYCLOAK_HOSTNAME
   grafana_domain_name: GRAFANA_DOMAIN_NAME
   ssl_email: SSL_EMAIL
   ssl_staging: SSL_STAGING
   redpanda_external_port: REDPANDA_EXTERNAL_PORT
+  vault_redpanda_superuser_password: REDPANDA_SUPERUSER_PASSWORD

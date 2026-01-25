@@ -27,7 +27,7 @@
     # ========================================================================
     - name: Ensure nginx is using HTTP-only config for certificate acquisition
       ansible.builtin.lineinfile:
-        path: "{{ app_home }}/.env"
+        path: "{{ app_home }}/.env.infra"
         regexp: "^NGINX_CONFIG_TEMPLATE="
         line: "NGINX_CONFIG_TEMPLATE=default-http-only.conf.template"
         state: present
@@ -89,7 +89,7 @@
         url: "http://{{ api_domain_name }}/.well-known/acme-challenge/test"
         status_code: [200]
         timeout: 10
-        return_content: yes
+        return_content: true
       register: nginx_health
       failed_when: nginx_health.status != 200
 
@@ -139,7 +139,7 @@
     - name: Verify HTTPS is working
       ansible.builtin.uri:
         url: "https://{{ api_domain_name }}"
-        validate_certs: no
+        validate_certs: false
         status_code: [200, 301, 302, 404, 502, 503]
         timeout: 10
       register: https_check
@@ -200,7 +200,10 @@
       - "Certificate Type: {{ ssl_type | default('Lets Encrypt') }}"
       - "API Domain: {{ api_domain_name }}"
       - "Keycloak Domain: {{ keycloak_domain_name }}"
-      - "{% if deployment_type == 'prod' and grafana_domain_name is defined and grafana_domain_name != 'localhost' %}Grafana Domain: {{ grafana_domain_name }}{% endif %}"
+      - >
+        {% if deployment_type == 'prod' and grafana_domain_name is defined
+        and grafana_domain_name != 'localhost' %}Grafana Domain:
+        {{ grafana_domain_name }}{% endif %}
       - "Auto-renewal: Enabled (cron: 3:00 AM, 3:00 PM)"
       - >
         {{ '⚠ WARNING: Using self-signed certificates - browsers will show

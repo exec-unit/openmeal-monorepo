@@ -9,10 +9,17 @@
 
 - name: Restart database containers
   ansible.builtin.command:
-    cmd: "make restart"
+    cmd: "make restart-db"
     chdir: "{{ app_home }}"
   become: true
   become_user: "{{ app_user }}"
   environment:
     PATH: "/usr/local/bin:/usr/bin:/bin"
+  register: db_restart_result
   changed_when: true
+  failed_when: false
+
+- name: Display database restart result
+  ansible.builtin.debug:
+    msg: "Database containers restarted to apply new user configurations"
+  when: db_restart_result is defined

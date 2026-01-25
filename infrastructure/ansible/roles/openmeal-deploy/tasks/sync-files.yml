@@ -32,7 +32,7 @@
     set_remote_user: true
   vars:
     ansible_ssh_user: "{{ ansible_user }}"
-  become: no
+  become: false
   delegate_to: localhost
   loop: "{{ sync_directories }}"
   loop_control:
@@ -44,7 +44,7 @@
     path: "{{ app_home }}/{{ item.dest }}"
     owner: "{{ app_user }}"
     group: "{{ app_group }}"
-    recurse: yes
+    recurse: true
   loop: "{{ sync_directories }}"
   loop_control:
     label: "{{ item.name }}"
