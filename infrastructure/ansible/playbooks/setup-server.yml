@@ -11,7 +11,7 @@
 
 - name: Setup Server for OpenMeal
   hosts: all
-  become: yes
+  become: true
 
   vars_files:
     - "{{ inventory_dir }}/group_vars/all.yml"

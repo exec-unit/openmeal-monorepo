@@ -29,6 +29,10 @@
   ansible.builtin.import_tasks: generate-configs.yml
   tags: [config, generate, quick]
 
+- name: Configure Redpanda SASL/SCRAM authentication
+  ansible.builtin.import_tasks: configure-redpanda.yml
+  tags: [config, redpanda, security, quick]
+
 - name: Setup SSL certificates
   ansible.builtin.import_tasks: setup-ssl.yml
   tags: [ssl, certificates]

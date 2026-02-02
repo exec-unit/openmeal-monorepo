@@ -6,6 +6,16 @@
 # Ansible does NOT manage Docker Compose directly
 # ============================================================================
 
+- name: Create Docker network if it doesn't exist
+  ansible.builtin.command:
+    cmd: docker network create {{ docker_network_name }}
+  become: true
+  register: network_create
+  changed_when: "'already exists' not in network_create.stderr"
+  failed_when:
+    - network_create.rc != 0
+    - "'already exists' not in network_create.stderr"
+
 - name: Pull latest images (if not building)
   ansible.builtin.command:
     cmd: make pull

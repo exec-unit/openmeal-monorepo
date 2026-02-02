@@ -1,0 +1,281 @@
+---
+# ============================================================================
+# OpenMeal - Release Playbook
+# ============================================================================
+# Atomic release deployment with service version updates
+# Called from CI/CD with release_map parameter
+#
+# Usage (CI/CD - unencrypted vault):
+#   ansible-playbook -i inventories/staging/hosts.yml playbooks/release.yml \
+#     --extra-vars 'release_map={"user-service":"sha-abc123"}' \
+#     --extra-vars 'registry_id=crXXXXXXXXXXXXXX'
+#
+# Usage (Local - encrypted vault):
+#   ansible-playbook -i inventories/staging/hosts.yml playbooks/release.yml \
+#     --vault-password-file .vault_pass \
+#     --extra-vars 'release_map={"user-service":"sha-abc123"}' \
+#     --extra-vars 'registry_id=crXXXXXXXXXXXXXX'
+#
+# ============================================================================
+
+- name: Deploy OpenMeal Release
+  hosts: all
+  become: true
+
+  vars_files:
+    - "{{ inventory_dir }}/group_vars/all.yml"
+    - "{{ inventory_dir }}/group_vars/vault.yml"
+
+  pre_tasks:
+    - name: Validate release_map parameter
+      ansible.builtin.fail:
+        msg: "release_map parameter is required"
+      when: release_map is not defined or release_map == ""
+
+    - name: Parse release map
+      ansible.builtin.set_fact:
+        release_map_dict: "{{ release_map | from_json }}"
+
+    - name: Display release information
+      ansible.builtin.debug:
+        msg:
+          - "Deploying Release to {{ deployment_type }}"
+          - "Services to update: {{ release_map_dict.keys() | list }}"
+          - "Release map: {{ release_map_dict }}"
+
+  tasks:
+    # ========================================================================
+    # Step 1: Atomic update of all.yml (merge versions)
+    # ========================================================================
+    - name: Read current service versions
+      ansible.builtin.set_fact:
+        current_versions: "{{ service_versions | default({}) }}"
+
+    - name: Merge release map with current versions
+      ansible.builtin.set_fact:
+        updated_versions: "{{ current_versions | combine(release_map_dict) }}"
+
+    - name: Display version changes
+      ansible.builtin.debug:
+        msg:
+          - "Updated versions:"
+          - "{{ updated_versions }}"
+
+    - name: Update service_versions in all.yml on control node
+      ansible.builtin.lineinfile:
+        path: "{{ inventory_dir }}/group_vars/all.yml"
+        regexp: "^  {{ item.key | replace('-', '_') }}:"
+        line: '  {{ item.key | replace(''-'', ''_'') }}: "{{ item.value }}"'
+        insertafter: "^service_versions:"
+      loop: "{{ updated_versions | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}: {{ item.value }}"
+      delegate_to: localhost
+      become: false
+
+    - name: Reload updated all.yml variables
+      ansible.builtin.include_vars:
+        file: "{{ inventory_dir }}/group_vars/all.yml"
+
+    # ========================================================================
+    # Step 2: Sync compose files (if changed)
+    # ========================================================================
+    - name: Sync docker-compose and related files
+      ansible.builtin.include_role:
+        name: openmeal-deploy
+        tasks_from: sync-files
+      tags: [sync]
+
+    # ========================================================================
+    # Step 3: Generate .env.infra with updated versions
+    # ========================================================================
+    - name: Check if .env.infra exists
+      ansible.builtin.stat:
+        path: "{{ app_home }}/.env.infra"
+      register: env_infra_stat
+
+    - name: Read existing service versions from .env.infra
+      ansible.builtin.shell: |
+        grep -E '^[A-Z_]+_VERSION=' {{ app_home }}/.env.infra | grep -v '^#' || true
+      register: existing_versions
+      when: env_infra_stat.stat.exists
+      changed_when: false
+
+    - name: Parse existing versions into dict
+      ansible.builtin.set_fact:
+        existing_versions_dict: >-
+          {{
+            dict(existing_versions.stdout_lines | default([])
+            | map('regex_replace', '^([^=]+)=(.+)$', '\1:\2')
+            | map('split', ':'))
+          }}
+      when: env_infra_stat.stat.exists
+
+    - name: Detect all services from docker-compose.yml
+      ansible.builtin.shell: |
+        grep -E '^\s+image:.*\$\{[A-Z_]+_VERSION' {{ app_home }}/docker-compose.yml | \
+        sed -E 's/.*\$\{([A-Z_]+_VERSION).*/\1/' | sort -u
+      register: all_services_raw
+      changed_when: false
+
+    - name: Create default versions dict for all services (fallback to latest)
+      ansible.builtin.set_fact:
+        default_versions: >-
+          {{
+            dict(all_services_raw.stdout_lines | default([])
+            | map('regex_replace', '^(.+)$', '\1:latest')
+            | map('split', ':'))
+          }}
+
+    - name: Start with default versions (all services = latest)
+      ansible.builtin.set_fact:
+        all_versions: "{{ default_versions | default({}) }}"
+
+    - name: Merge existing versions from current .env.infra
+      ansible.builtin.set_fact:
+        all_versions: "{{ all_versions | combine(existing_versions_dict | default({})) }}"
+      when: env_infra_stat.stat.exists
+
+    - name: Apply new versions from release_map (highest priority)
+      ansible.builtin.set_fact:
+        all_versions: "{{ all_versions | combine({(item.key | upper | replace('-', '_') ~ '_VERSION'): item.value}) }}"
+      loop: "{{ updated_versions | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}_VERSION={{ item.value }}"
+
+    - name: Generate .env.infra from example
+      ansible.builtin.copy:
+        src: "{{ app_home }}/.env.infra.example"
+        dest: "{{ app_home }}/.env.infra"
+        owner: "{{ app_user }}"
+        group: "{{ app_group }}"
+        mode: "0600"
+        remote_src: yes
+
+    - name: Set REGISTRY_ID in .env.infra
+      ansible.builtin.lineinfile:
+        path: "{{ app_home }}/.env.infra"
+        regexp: "^REGISTRY_ID="
+        line: "REGISTRY_ID={{ registry_id }}"
+
+    - name: Restore/update all service versions in .env.infra
+      ansible.builtin.lineinfile:
+        path: "{{ app_home }}/.env.infra"
+        regexp: "^{{ item.key }}="
+        line: "{{ item.key }}={{ item.value }}"
+        insertafter: "^# Microservice Versions"
+      loop: "{{ all_versions | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}={{ item.value }}"
+      when: all_versions is defined and all_versions | length > 0
+
+    - name: Replace vault secrets in .env.infra
+      ansible.builtin.include_role:
+        name: openmeal-deploy
+        tasks_from: generate-configs
+      vars:
+        skip_copy_example: true
+
+    - name: Generate service .env files
+      ansible.builtin.include_role:
+        name: openmeal-deploy
+        tasks_from: generate-service-envs
+
+    # ========================================================================
+    # Step 4: Apply changes via Docker Compose
+    # ========================================================================
+    - name: Login to Yandex Container Registry
+      ansible.builtin.command:
+        cmd: docker login cr.yandex --username {{ vault_yc_registry_username }} --password-stdin
+        stdin: "{{ vault_yc_registry_password }}"
+      become_user: "{{ app_user }}"
+      no_log: true
+      changed_when: false
+
+    - name: Pull updated images
+      ansible.builtin.command:
+        cmd: docker compose --env-file .env.infra pull {{ release_map_dict.keys() | join(' ') }}
+        chdir: "{{ app_home }}"
+      become_user: "{{ app_user }}"
+      register: pull_result
+      changed_when: "'Downloaded' in pull_result.stdout or 'Pulled' in pull_result.stdout"
+
+    - name: Deploy updated services
+      ansible.builtin.command:
+        cmd: docker compose --env-file .env.infra up -d --no-deps {{ release_map_dict.keys() | join(' ') }}
+        chdir: "{{ app_home }}"
+      become_user: "{{ app_user }}"
+      register: deploy_result
+      changed_when: true
+
+    - name: Wait for services to be healthy
+      ansible.builtin.pause:
+        seconds: 10
+
+    - name: Verify deployed services are running
+      ansible.builtin.command:
+        cmd: docker compose --env-file .env.infra ps --format json {{ release_map_dict.keys() | join(' ') }}
+      args:
+        chdir: "{{ app_home }}"
+      become_user: "{{ app_user }}"
+      register: service_status
+      changed_when: false
+
+    - name: Tag successfully deployed images as latest in registry
+      ansible.builtin.shell: |
+        IMAGE="cr.yandex/{{ registry_id }}/{{ item.key }}:{{ item.value }}"
+        LATEST_TAG="cr.yandex/{{ registry_id }}/{{ item.key }}:latest"
+        docker pull "$IMAGE"
+        docker tag "$IMAGE" "$LATEST_TAG"
+        docker push "$LATEST_TAG"
+      loop: "{{ updated_versions | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}:{{ item.value }} -> latest"
+      become_user: "{{ app_user }}"
+      when: service_status.rc == 0
+      no_log: false
+
+    - name: Clean up old service images (keep current versions)
+      ansible.builtin.shell: |
+        # Get list of service image names
+        SERVICES="api-gateway user-service"
+        for service in $SERVICES; do
+          # Remove old images for this service, excluding current and latest tags
+          docker images "cr.yandex/{{ registry_id }}/$service" --format "{{ '{{' }}.Repository{{ '}}' }}:{{ '{{' }}.Tag{{ '}}' }}" | \
+          grep -v ':latest$' | \
+          while read image; do
+            # Extract tag
+            TAG="${image##*:}"
+            # Check if this tag is currently in use in .env.infra
+            if ! grep -q "=${TAG}$" {{ app_home }}/.env.infra 2>/dev/null; then
+              echo "Removing old image: $image"
+              docker rmi "$image" 2>/dev/null || true
+            fi
+          done
+        done
+      args:
+        chdir: "{{ app_home }}"
+      become_user: "{{ app_user }}"
+      changed_when: false
+      ignore_errors: true
+
+  post_tasks:
+    - name: Display service status
+      ansible.builtin.command:
+        cmd: docker compose ps
+        chdir: "{{ app_home }}"
+      become_user: "{{ app_user }}"
+      register: services_status
+      changed_when: false
+
+    - name: Show running services
+      ansible.builtin.debug:
+        msg: "{{ services_status.stdout_lines }}"
+
+    - name: Display deployment summary
+      ansible.builtin.debug:
+        msg:
+          - "Release deployed successfully!"
+          - "Environment: {{ deployment_type }}"
+          - "Updated services: {{ release_map_dict.keys() | list }}"
+          - "Versions: {{ release_map_dict }}"

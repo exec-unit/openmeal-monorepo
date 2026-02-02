@@ -1,0 +1,20 @@
+---
+- name: Ensure Redpanda config directory exists
+  ansible.builtin.file:
+    path: "{{ app_home }}/config/redpanda"
+    state: directory
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: "0755"
+
+- name: Make Redpanda bootstrap-user.sh script executable
+  ansible.builtin.file:
+    path: "{{ app_home }}/config/redpanda/bootstrap-user.sh"
+    mode: "0755"
+    state: file
+
+- name: Display Redpanda SASL/SCRAM configuration status
+  ansible.builtin.debug:
+    msg:
+      - "✓ Redpanda SASL/SCRAM authentication configured"
+      - "Superuser will be created on container startup"
