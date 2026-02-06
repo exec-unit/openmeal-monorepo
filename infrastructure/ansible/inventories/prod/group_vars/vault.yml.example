@@ -1,9 +1,13 @@
 ---
 # ============================================================================
-# Production Environment - Secret Variables (Ansible Vault Encrypted)
+# Production Environment - Secret Variables
 # ============================================================================
+# Copy this file to vault.yml and customize for local use
+#
 # Encrypt this file with: ansible-vault encrypt vault.yml
 # Edit encrypted file with: ansible-vault edit vault.yml
+#
+# In CI/CD, this file is generated dynamically from GitHub Secrets
 # ============================================================================
 
 # Database passwords
@@ -21,7 +25,34 @@ vault_minio_root_password: "CHANGE_ME_STRONG_prod_minio"
 # Monitoring passwords
 vault_grafana_admin_password: "CHANGE_ME_STRONG_prod_grafana"
 
+# Redpanda SASL/SCRAM authentication
+vault_redpanda_superuser_password: "CHANGE_ME_STRONG_prod_redpanda_admin"
+
 # Backup credentials (S3-compatible storage)
 vault_s3_access_key_id: "CHANGE_ME_prod_s3_access_key"
 vault_s3_secret_access_key: "CHANGE_ME_STRONG_prod_s3_secret_key"
 vault_restic_password: "CHANGE_ME_STRONG_prod_restic_encryption_password"
+
+# ============================================================================
+# Microservices Secrets
+# ============================================================================
+# Service names must be in kebab-case (e.g., user-service, order-service)
+# Variable prefixes must be in SNAKE_CASE (e.g., USER_SERVICE_, ORDER_SERVICE_)
+
+# Option 1: Consolidated (recommended for 11+ services)
+# vault_services_env: |
+#   USER_SERVICE_DB_PASSWORD=secret123
+#   USER_SERVICE_JWT_SECRET=jwt456
+#   ORDER_SERVICE_DB_PASSWORD=order_secret
+#   ORDER_SERVICE_KAFKA_PASSWORD=kafka_pass
+
+# Option 2: Per-service (better isolation)
+# vault_user_service_env: |
+#   DB_PASSWORD=secret123
+#   JWT_SECRET=jwt456
+# vault_order_service_env: |
+#   DB_PASSWORD=order_secret
+#   KAFKA_PASSWORD=kafka_pass
+# vault_api_gateway_env: |
+#   API_KEY=gateway_key
+#   SECRET=gateway_secret
