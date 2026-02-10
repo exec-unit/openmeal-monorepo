@@ -28,6 +28,19 @@ app_home: /opt/openmeal
 app_user: openmeal
 app_group: openmeal
 
+# Container Registry
+registry_id: crp123456
+
+# ============================================================================
+# Microservice Versions (auto-updated by CI/CD)
+# ============================================================================
+# Only changed services are updated, others remain at previous version
+# Format: service-name (kebab-case) → version
+service_versions: {}
+  # user_service: "v1.2.3"
+  # order_service: "v1.2.1"
+  # payment_service: "v1.1.5"
+
 # Backup configuration
 backup_enabled: true
 backup_s3_bucket: openmeal-backups-prod
