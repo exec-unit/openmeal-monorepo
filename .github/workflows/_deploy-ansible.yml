@@ -1,0 +1,100 @@
+# =============================================================================
+# Reusable Workflow: Deploy via Ansible
+# Purpose: Execute Ansible playbook to deploy services to target environment
+# Called by: deploy-staging.yml, release-production.yml
+# Key features:
+#   - Dynamic vault.yml generation from GitHub Secrets (secure, no shell injection)
+#   - Automated inventory creation from secrets
+#   - Idempotent deployment using release_map
+# =============================================================================
+name: Deploy via Ansible
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+        description: "Environment: staging or production"
+      release_map:
+        required: true
+        type: string
+        description: "JSON map of services to versions"
+    secrets:
+      ANSIBLE_SSH_KEY:
+        required: true
+      ANSIBLE_INVENTORY_HOSTS:
+        required: true
+      ANSIBLE_INVENTORY_ALL:
+        required: true
+      YC_REGISTRY_ID:
+        required: true
+      SECRETS_JSON:
+        required: true
+        description: "JSON string containing all secrets for vault.yml generation (INFRA_ENV, SERVICES_ENV, *_ENV)"
+
+jobs:
+  deploy:
+    name: Deploy to ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup SSH for Ansible
+        uses: webfactory/ssh-agent@a6f90b1f127823b31d4d4a8d96047790581349bd
+        with:
+          ssh-private-key: ${{ secrets.ANSIBLE_SSH_KEY }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: "pip"
+          cache-dependency-path: infrastructure/ansible/requirements-pip.txt
+
+      - name: Install Ansible and dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rsync
+          pip install -r infrastructure/ansible/requirements-pip.txt
+
+      - name: Create inventory directory structure
+        run: |
+          mkdir -p infrastructure/ansible/inventories/${{ inputs.environment }}/group_vars
+
+      - name: Create hosts.yml from secret
+        run: |
+          echo "${{ secrets.ANSIBLE_INVENTORY_HOSTS }}" > infrastructure/ansible/inventories/${{ inputs.environment }}/hosts.yml
+
+      - name: Create all.yml from secret
+        run: |
+          echo "${{ secrets.ANSIBLE_INVENTORY_ALL }}" > infrastructure/ansible/inventories/${{ inputs.environment }}/group_vars/all.yml
+
+      - name: Generate vault.yml dynamically from secrets
+        env:
+          SECRETS_JSON: ${{ secrets.SECRETS_JSON }}
+        run: |
+          VAULT_FILE="infrastructure/ansible/inventories/${{ inputs.environment }}/group_vars/vault.yml"
+          python3 .github/scripts/generate-vault.py "$VAULT_FILE"
+
+      - name: Verify inventory files
+        run: |
+          echo "Checking inventory files..."
+          ls -la infrastructure/ansible/inventories/${{ inputs.environment }}/
+          ls -la infrastructure/ansible/inventories/${{ inputs.environment }}/group_vars/
+          echo ""
+          echo "Inventory files created successfully"
+          [ -f infrastructure/ansible/inventories/${{ inputs.environment }}/hosts.yml ] && echo "✓ hosts.yml"
+          [ -f infrastructure/ansible/inventories/${{ inputs.environment }}/group_vars/all.yml ] && echo "✓ all.yml"
+          [ -f infrastructure/ansible/inventories/${{ inputs.environment }}/group_vars/vault.yml ] && echo "✓ vault.yml"
+
+      - name: Deploy via Ansible
+        env:
+          RELEASE_MAP: ${{ inputs.release_map }}
+        run: |
+          cd infrastructure/ansible
+          ansible-playbook -i inventories/${{ inputs.environment }}/hosts.yml \
+            playbooks/release.yml \
+            --extra-vars "release_map='$RELEASE_MAP'" \
+            --extra-vars "registry_id=${{ secrets.YC_REGISTRY_ID }}"

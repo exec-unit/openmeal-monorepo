@@ -1,0 +1,68 @@
+# =============================================================================
+# Reusable Workflow: Build Docker Images
+# Purpose: Build and push Docker images for changed services to container registry
+# Called by: deploy-staging.yml, release-production.yml
+# =============================================================================
+name: Build Images
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+        description: "Environment: staging or production"
+      services:
+        required: true
+        type: string
+        description: "JSON array of services to build"
+      version:
+        required: true
+        type: string
+        description: "Docker image tag version"
+      max_parallel:
+        required: false
+        type: number
+        default: 0
+        description: "Max parallel builds (0 = unlimited)"
+    secrets:
+      YC_REGISTRY_ID:
+        required: true
+      YC_REGISTRY_USERNAME:
+        required: true
+      YC_REGISTRY_PASSWORD:
+        required: true
+
+jobs:
+  build:
+    name: Build ${{ matrix.service }}
+    if: inputs.services != '[]'
+    environment: ${{ inputs.environment }}
+    strategy:
+      fail-fast: false
+      max-parallel: ${{ inputs.max_parallel > 0 && inputs.max_parallel || 999 }}
+      matrix:
+        service: ${{ fromJSON(inputs.services) }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Yandex Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: cr.yandex
+          username: ${{ secrets.YC_REGISTRY_USERNAME }}
+          password: ${{ secrets.YC_REGISTRY_PASSWORD }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./services/${{ matrix.service }}/Dockerfile
+          push: true
+          tags: cr.yandex/${{ secrets.YC_REGISTRY_ID }}/${{ matrix.service }}:${{ inputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

@@ -1,0 +1,148 @@
+# =============================================================================
+# Reusable Workflow: Prepare Release
+# Purpose: Detect changed services and generate release metadata
+# Called by: deploy-staging.yml, release-production.yml
+# Outputs:
+#   - version: Deployment version (commit SHA for staging, Git tag for production)
+#   - services: JSON array of changed services
+#   - release_map: JSON mapping of service -> version for Ansible
+#   - compose_changed: Boolean indicating if compose files changed
+# =============================================================================
+name: Prepare Release
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+        description: "Environment: staging or production"
+      version_override:
+        required: false
+        type: string
+        description: "Override version (for manual dispatch)"
+    outputs:
+      version:
+        description: "Release version"
+        value: ${{ jobs.prepare.outputs.version }}
+      release_map:
+        description: "JSON map of services to versions"
+        value: ${{ jobs.prepare.outputs.release_map }}
+      services:
+        description: "List of changed services"
+        value: ${{ jobs.prepare.outputs.services }}
+      compose_changed:
+        description: "Whether compose files changed"
+        value: ${{ jobs.prepare.outputs.compose_changed }}
+
+jobs:
+  prepare:
+    name: Prepare Release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      release_map: ${{ steps.release-map.outputs.map }}
+      services: ${{ steps.services-list.outputs.services }}
+      compose_changed: ${{ steps.check-compose.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      # Generate version (depends on environment)
+      - name: Generate version
+        id: version
+        run: |
+          if [ -n "${{ inputs.version_override }}" ]; then
+            VERSION="${{ inputs.version_override }}"
+          elif [ "${{ inputs.environment }}" = "staging" ]; then
+            # Staging: commit SHA
+            VERSION="sha-$(git rev-parse --short HEAD)"
+          else
+            # Production: Git tag
+            VERSION="${GITHUB_REF#refs/tags/}"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
+      # Determine comparison base
+      - name: Get comparison base
+        id: base
+        run: |
+          if [ "${{ inputs.environment }}" = "staging" ]; then
+            # Staging: use github.event.before for batch push support
+            # Fallback to HEAD~1 for new branches, manual dispatch, or amend commits
+            BEFORE_SHA="${{ github.event.before }}"
+
+            if [ -z "$BEFORE_SHA" ] || [ "$BEFORE_SHA" = "0000000000000000000000000000000000000000" ]; then
+              # Empty or null SHA (new branch or manual dispatch)
+              BASE="HEAD~1"
+              echo "Using HEAD~1 (no previous commit available)"
+            else
+              if git cat-file -e "$BEFORE_SHA^{commit}" 2>/dev/null; then
+                BASE="$BEFORE_SHA"
+                echo "Using github.event.before: $BEFORE_SHA"
+              else
+                BASE="HEAD~1"
+                echo "Falling back to HEAD~1"
+              fi
+            fi
+          else
+            # Production: previous tag
+            CURRENT_TAG="${{ steps.version.outputs.version }}"
+            PREV_TAG=$(git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | grep -v "^${CURRENT_TAG}$" | head -1)
+            if [ -z "$PREV_TAG" ]; then
+              PREV_TAG=$(git rev-list --max-parents=0 HEAD)
+            fi
+            BASE="$PREV_TAG"
+          fi
+
+          echo "base=$BASE" >> $GITHUB_OUTPUT
+          echo "Final comparison base: $BASE"
+
+      # Check compose changes
+      - name: Check compose changes
+        id: check-compose
+        run: |
+          BASE="${{ steps.base.outputs.base }}"
+          if git diff "$BASE" --name-only | grep -qE '^(docker-compose\.yml|compose/|Makefile|makefiles/|scripts/)'; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "Compose files changed"
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+          fi
+
+      # Detect changed services
+      - name: Detect changed services
+        id: detect
+        uses: step-security/changed-files@60967b822d3001fa82242f8d6b4ed46bc3600a68
+        with:
+          files: services/**
+          dir_names: true
+          dir_names_max_depth: 2
+          base_sha: ${{ steps.base.outputs.base }}
+
+      - name: Build services list
+        id: services-list
+        run: |
+          if [ -n "${{ steps.detect.outputs.all_changed_files }}" ]; then
+            # Extract service names: remove 'services/' prefix and filter out 'services' itself
+            SERVICES=$(echo "${{ steps.detect.outputs.all_changed_files }}" | tr ' ' '\n' | \
+              sed 's|^services/||' | grep -v '^services$' | sort -u | \
+              jq -R -s -c 'split("\n") | map(select(length > 0))')
+          else
+            SERVICES="[]"
+          fi
+          echo "services=$SERVICES" >> $GITHUB_OUTPUT
+          echo "Changed services: $SERVICES"
+
+      # Create Release Map
+      - name: Generate release map
+        id: release-map
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          SERVICES='${{ steps.services-list.outputs.services }}'
+          RELEASE_MAP=$(echo "$SERVICES" | jq -c --arg ver "$VERSION" 'map({(.): $ver}) | add // {}')
+
+          echo "Release Map (compact): $RELEASE_MAP"
+          echo "map=$RELEASE_MAP" >> $GITHUB_OUTPUT
