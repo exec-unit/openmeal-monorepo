@@ -1,0 +1,96 @@
+# =============================================================================
+# Continuous Deployment: Staging Environment
+# Triggers: Push to main OR manual dispatch
+# Strategy: Deploy only changed services (cost + time optimization)
+# =============================================================================
+name: CD Staging
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "services/**"
+      - "docker-compose.yml"
+      - "compose/**"
+      - "Makefile"
+      - "makefiles/**"
+      - "scripts/**"
+  workflow_dispatch:
+    inputs:
+      commit_sha:
+        description: "Commit SHA to deploy (leave empty for latest)"
+        required: false
+        type: string
+
+jobs:
+  prepare-release:
+    uses: ./.github/workflows/_prepare-release.yml
+    with:
+      environment: "staging"
+      version_override: ${{ inputs.commit_sha && format('sha-{0}', inputs.commit_sha) || '' }}
+
+  build-images:
+    needs: prepare-release
+    uses: ./.github/workflows/_build-images.yml
+    with:
+      environment: "staging"
+      services: ${{ needs.prepare-release.outputs.services }}
+      version: ${{ needs.prepare-release.outputs.version }}
+      max_parallel: 0
+    secrets:
+      YC_REGISTRY_ID: ${{ secrets.YC_REGISTRY_ID }}
+      YC_REGISTRY_USERNAME: ${{ secrets.YC_REGISTRY_USERNAME }}
+      YC_REGISTRY_PASSWORD: ${{ secrets.YC_REGISTRY_PASSWORD }}
+
+  deploy:
+    needs: [prepare-release, build-images]
+    if: always() && (needs.build-images.result == 'success' || needs.prepare-release.outputs.compose_changed == 'true')
+    uses: ./.github/workflows/_deploy-ansible.yml
+    with:
+      environment: "staging"
+      release_map: ${{ needs.prepare-release.outputs.release_map }}
+    secrets:
+      ANSIBLE_SSH_KEY: ${{ secrets.ANSIBLE_SSH_KEY }}
+      ANSIBLE_INVENTORY_HOSTS: ${{ secrets.ANSIBLE_INVENTORY_HOSTS }}
+      ANSIBLE_INVENTORY_ALL: ${{ secrets.ANSIBLE_INVENTORY_ALL }}
+      YC_REGISTRY_ID: ${{ secrets.YC_REGISTRY_ID }}
+      SECRETS_JSON: ${{ toJSON(secrets) }}
+
+  cleanup-registry:
+    name: Cleanup Old Staging Images
+    needs: deploy
+    if: success()
+    environment: staging
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install Yandex Cloud CLI
+        run: |
+          curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash
+          echo "$HOME/yandex-cloud/bin" >> $GITHUB_PATH
+
+      - name: Authenticate with Yandex Cloud
+        env:
+          YC_TOKEN: ${{ secrets.YC_REGISTRY_PASSWORD }}
+        run: |
+          yc config profile create cleanup-profile
+          yc config set token "$YC_TOKEN"
+
+      - name: Run cleanup script
+        env:
+          YC_REGISTRY_ID: ${{ secrets.YC_REGISTRY_ID }}
+        run: |
+          python3 .github/scripts/cleanup-registry-yc.py \
+            --registry-id "$YC_REGISTRY_ID" \
+            --keep-days 14
